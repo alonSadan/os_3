@@ -23,7 +23,6 @@
 #include "fcntl.h"
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
-#define DIGITS 14
 
 static void itrunc(struct inode*);
 // there should be one superblock per disk device, but we run with
@@ -673,6 +672,7 @@ nameiparent(char *path, char *name)
 }
 
 #include "fcntl.h"
+#define DIGITS 14
 
 char* itoa(int i, char b[]){
     char const digit[] = "0123456789";
@@ -693,7 +693,6 @@ char* itoa(int i, char b[]){
     }while(i);
     return b;
 }
-
 //remove swap file of proc p;
 int
 removeSwapFile(struct proc* p)
