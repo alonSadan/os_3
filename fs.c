@@ -21,7 +21,6 @@
 #include "buf.h"
 #include "file.h"
 #include "fcntl.h"
-#include "sysfile.h"
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define DIGITS 14
