@@ -672,6 +672,8 @@ nameiparent(char *path, char *name)
   return namex(path, 1, name);
 }
 
+#include "fcntl.h"
+
 char* itoa(int i, char b[]){
     char const digit[] = "0123456789";
     char* p = b;
