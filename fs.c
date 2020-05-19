@@ -21,6 +21,7 @@
 #include "buf.h"
 #include "file.h"
 #include "fcntl.h"
+#include "sysfile.h"
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define DIGITS 14
@@ -690,22 +691,6 @@ char* itoa(int i, char b[]){
         i = i/10;
     }while(i);
     return b;
-}
-
-// Is the directory dp empty except for "." and ".." ?
-int
-isdirempty(struct inode *dp)
-{
-  int off;
-  struct dirent de;
-
-  for(off=2*sizeof(de); off<dp->size; off+=sizeof(de)){
-    if(readi(dp, (char*)&de, off, sizeof(de)) != sizeof(de))
-      panic("isdirempty: readi");
-    if(de.inum != 0)
-      return 0;
-  }
-  return 1;
 }
 
 //remove swap file of proc p;
