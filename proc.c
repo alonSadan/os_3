@@ -111,7 +111,7 @@ found:
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
-
+  
   return p;
 }
 
@@ -531,4 +531,14 @@ procdump(void)
     }
     cprintf("\n");
   }
+}
+
+
+
+struct  freePageInSwap* getNextFreePageInSwap(struct proc* p){
+   struct freePageInSwap* toreturn = p->head;
+   if(p->head != null){
+      p->head = p->head->next;
+   }
+   return toreturn;
 }

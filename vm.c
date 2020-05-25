@@ -223,7 +223,8 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 {
   char *mem;
   uint a;
-
+  struct freePageInSwap* add;
+  struct proc* p = myproc();
   if(newsz >= KERNBASE)
     return 0;
   if(newsz < oldsz)
@@ -231,6 +232,18 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 
   a = PGROUNDUP(oldsz);
   for(; a < newsz; a += PGSIZE){
+    if(p->pagesInMemory >= 16){
+      if((add = getNextFreePageInSwap(p)) == null){
+      cprintf("allocuvm out of memory\n");
+      deallocuvm(pgdir, newsz, oldsz);
+      return 0;        
+      }
+      //in swap scenario
+     ++p->pagesInSwapfile;
+     writeToSwapFile(p,"",a , newsz-oldsz);           //writeToSwapFile(struct proc * p, char* buffer, uint placeOnFile, uint size)
+    }
+    ++p->pagesInMemory;
+
     mem = kalloc();
     if(mem == 0){
       cprintf("allocuvm out of memory\n");
