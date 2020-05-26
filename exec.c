@@ -38,6 +38,15 @@ exec(char *path, char **argv)
   if((pgdir = setupkvm()) == 0)
     goto bad;
 
+  
+  for (int i = 0; i < MAX_PSYC_PAGES; i++)
+  {
+    curproc->swapPmd[i].va = (char *)-1;
+    curproc->ramPmd[i].va = (char *)-1;
+    curproc->swapPmd[i].occupied = 0;
+    curproc->ramPmd[i].occupied = 0;
+  }
+
   // Load program into memory.
   sz = 0;
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
@@ -49,7 +58,7 @@ exec(char *path, char **argv)
       goto bad;
     if(ph.vaddr + ph.memsz < ph.vaddr)
       goto bad;
-    if((sz = allocuvm(pgdir, sz, ph.vaddr + ph.memsz)) == 0)
+    if((sz = allocuvm(pgdir, sz, ph.vaddr + ph.memsz)) == 0)   //allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       goto bad;
     if(ph.vaddr % PGSIZE != 0)
       goto bad;
@@ -99,11 +108,18 @@ exec(char *path, char **argv)
   curproc->sz = sz;
   curproc->tf->eip = elf.entry;  // main
   curproc->tf->esp = sp;
+  
+  removeSwapFile(curproc); //remove old swap file and create new one
+  createSwapFile(curproc);
+        //   memset(curproc->swapPmd,0,MAX_PSYC_PAGES*sizeof(struct paging_meta_data));
+        // memset(curproc->ramPmd,0,MAX_PSYC_PAGES*sizeof(struct paging_meta_data));
+
   switchuvm(curproc);
   freevm(oldpgdir);
   return 0;
 
  bad:
+  cprintf("exec: bad scenario");
   if(pgdir)
     freevm(pgdir);
   if(ip){
