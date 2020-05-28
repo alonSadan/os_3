@@ -121,9 +121,13 @@ found:
     p->ramPmd[i].va = (char *)-1;
     p->swapPmd[i].occupied = 0;
     p->ramPmd[i].occupied = 0;
+    
   }
 
-  p->head = null;
+  p->pagesInMemory = 0;
+  p->pagesInSwapfile = 0;
+
+  // p->head = null;
 
   return p;
 }
@@ -226,27 +230,31 @@ int fork(void)
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
 
   pid = np->pid;
+  
   np->pagesInMemory = curproc->pagesInMemory;
   np->pagesInSwapfile = curproc->pagesInSwapfile;
-
-  for (int i = 0; i < MAX_PSYC_PAGES; ++i)
-  {
+  
+  for(int i = 0; i < MAX_PSYC_PAGES; ++i){
     np->ramPmd[i] = curproc->ramPmd[i];
+    np->ramPmd[i].pgdir = np->pgdir;
     np->swapPmd[i] = curproc->swapPmd[i];
+    np->swapPmd[i].pgdir = np->pgdir;
   }
-
+  
   createSwapFile(np);
   int read = 0;
-  char buffer[PGSIZE];
-  if (curproc != initproc)
-  {
-    while ((read = readFromSwapFile(curproc, buffer, offset, PGSIZE) != -1))
-    {
-      if (writeToSwapFile(np, buffer, offset, PGSIZE) == -1)
-      {
+  int offset = 0;
+  char buffer[PGSIZE/2];
+  
+  //not including 'sh' and 'init'
+  if (curproc->pid > 2){
+    while ((read = readFromSwapFile(curproc, buffer, offset, PGSIZE/2) != 0)){
+      if (read == -1)
+        panic("fork: swap file not readable");
+      if (writeToSwapFile(np, buffer, offset, read) == -1)
         panic("fork: failed to write buffer to child");
-      }
-      offset += PGSIZE;
+      
+      offset += read;
     }
   }
 
@@ -338,8 +346,8 @@ int wait(void)
         kfree(p->kstack);
         p->kstack = 0;
         freevm(p->pgdir);
-        memset(p->swapPmd, 0, MAX_PSYC_PAGES * sizeof(struct paging_meta_data));
-        memset(p->ramPmd, 0, MAX_PSYC_PAGES * sizeof(struct paging_meta_data));
+        memset(p->swapPmd,0,MAX_PSYC_PAGES*sizeof(struct paging_meta_data));
+        memset(p->ramPmd,0,MAX_PSYC_PAGES*sizeof(struct paging_meta_data));
 
         p->pid = 0;
         p->parent = 0;
@@ -628,13 +636,13 @@ uint getPageIndexInMemory(struct proc *p, char *a)
 }
 uint getNextFreePageIndexInMemory(struct proc *p)
 {
-  if (p->pagesInMemory >= MAX_PSYC_PAGES)
+  if(p->pagesInMemory >= MAX_PSYC_PAGES)
     return -1;
 
   int i;
   for (i = 0; i < MAX_PSYC_PAGES; i++)
   {
-    if (!p->ramPmd[i].occupied)
+    if (!p->ramPmd[i].occupied)  
       return i;
   }
   return -1;
