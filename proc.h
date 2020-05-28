@@ -42,6 +42,8 @@ struct paging_meta_data
 {
   char *va;
   uint occupied;
+  pde_t *pgdir;
+  int offset; //offset in swapFile
   //int age;
 };
 
