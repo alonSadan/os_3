@@ -243,7 +243,7 @@ int fork(void)
   
   createSwapFile(np);
   int read = 0;
-  int offset = 0;
+//int offset = 0;
   char buffer[PGSIZE/2];
   
   //not including 'sh' and 'init'
