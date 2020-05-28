@@ -47,6 +47,9 @@ exec(char *path, char **argv)
     curproc->ramPmd[i].occupied = 0;
   }
 
+  curproc->pagesInMemory = 0;
+  curproc->pagesInSwapfile = 0;
+
   // Load program into memory.
   sz = 0;
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
@@ -101,6 +104,11 @@ exec(char *path, char **argv)
     if(*s == '/')
       last = s+1;
   safestrcpy(curproc->name, last, sizeof(curproc->name));
+
+  for(int i=0;i < MAX_PSYC_PAGES;i++){
+    if (curproc->ramPmd[i].occupied) curproc->ramPmd[i].pgdir = pgdir;
+    if (curproc->swapPmd[i].occupied) curproc->swapPmd[i].pgdir = pgdir;
+  }
 
   // Commit to the user image.
   oldpgdir = curproc->pgdir;

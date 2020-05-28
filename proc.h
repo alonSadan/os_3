@@ -42,6 +42,8 @@ struct paging_meta_data
 {
   char *va;
   uint occupied;
+  pde_t *pgdir;
+  int offset; //offset in swapFile
   //int age;
 };
 
@@ -87,6 +89,7 @@ struct proc
 
   struct freePageInSwap *head;
 };
+
 
 // Process memory is laid out contiguously, low addresses first:
 //   text
