@@ -29,11 +29,7 @@
             "type": "gdb",
             "request": "attach",
             "executable": "kernel",
-<<<<<<< HEAD
-            "target": "localhost:26001",
-=======
             "target": "localhost:26000",
->>>>>>> 5dc923d1bfbca804128d7c79781d6a3b678e87fc
             "remote": true,
             "cwd": "${workspaceFolder}",
             "gdbpath": "/usr/bin/gdb"

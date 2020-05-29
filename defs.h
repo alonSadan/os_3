@@ -80,6 +80,7 @@ void kinit2(void *, void *);
 void incrementReferences(char *);
 void decrementReferences(char *);
 uint getNumberReferences(char *);
+void _kfree(char *v);
 
 // kbd.c
 void kbdintr(void);
@@ -138,6 +139,9 @@ uint getNextFreePageIndexInSwap(struct proc *);
 uint getPageIndexInSwap(struct proc *, char *);
 uint getPageIndexInMemory(struct proc *, char *);
 uint getNextFreePageIndexInMemory(struct proc *p);
+
+pde_t *
+cowuvm(pde_t *pgdir, uint sz);
 
 // swtch.S
 void swtch(struct context **, struct context *);

@@ -84,7 +84,7 @@ void trap(struct trapframe *tf)
     lapiceoi();
     break;
   case T_PGFLT:
-  cprintf("trap: pagefault\n");
+  
     //[eax],eax??    pde = &pgdir[PDX(va)];
 
     //walkpgdir(pde_t *pgdir, const void *va, int alloc)

@@ -294,8 +294,11 @@ int deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       if (pa == 0)
         panic("kfree");
       char *v = P2V(pa);
-      kfree(v);
-      //check why not working (maybe exec bug)
+      if(getNumberReferences(v) == 1){
+        kfree(v);
+      }else{
+        decrementReferences(v);
+      }
       idex = getPagePgdirIndex(0,pgdir,(char *)a);
       if (idex != -1){
         if (p->ramPmd[idex].occupied) --p->pagesInMemory;
@@ -350,10 +353,55 @@ void clearpteu(pde_t *pgdir, char *uva)
   *pte &= ~PTE_U;
 }
 
+pde_t *
+copyuvm(pde_t *pgdir, uint sz)
+{
+  pde_t *d;
+  pte_t *pte;
+  uint pa, i, flags;
+  char *mem;
+
+  if ((d = setupkvm()) == 0)
+    return 0;
+  for (i = 0; i < sz; i += PGSIZE)
+  {
+    if ((pte = walkpgdir(pgdir, (void *)i, 0)) == 0)
+      panic("copyuvm: pte should exist");
+    if (!(*pte & PTE_P) && !(*pte & PTE_PG))  //
+      panic("copyuvm: page not present");
+    
+    //ToDo: check if nessecary
+    if(*pte & PTE_PG){
+      pte = walkpgdir(d,(char *)i,1);
+      *pte |= PTE_PG; //in swapFile
+      *pte &= ~PTE_P; //not in ram
+      lcr3(V2P(myproc()->pgdir));
+      continue;
+    }
+
+    pa = PTE_ADDR(*pte);
+    flags = PTE_FLAGS(*pte);
+    if ((mem = kalloc()) == 0)
+      goto bad;
+    memmove(mem, (char *)P2V(pa), PGSIZE);
+    if (mappages(d, (void *)i, PGSIZE, V2P(mem), flags) < 0)
+    {
+      kfree(mem);
+      goto bad;
+    }
+  }
+  return d;
+
+bad:
+  freevm(d);
+  return 0;
+}
+
+
 // Given a parent process's page table, create a copy
 // of it for a child.
 pde_t *
-copyuvm(pde_t *pgdir, uint sz)
+cowuvm(pde_t *pgdir, uint sz)
 {
   pde_t *d;
   pte_t *pte;
@@ -378,6 +426,7 @@ copyuvm(pde_t *pgdir, uint sz)
       continue;
     }
     //mark ad read only
+    *pte |= PTE_COW;
     *pte &=  ~PTE_W ; 
 
     pa = PTE_ADDR(*pte);
@@ -388,17 +437,16 @@ copyuvm(pde_t *pgdir, uint sz)
     if (mappages(d, (void *)i, PGSIZE, pa, flags) < 0)
     {
       // kfree(mem);
-      // goto bad;
-      panic("copyuvm: mapages failed");
+      goto bad;
     }
-    incrementReferences((void *)i);
+    incrementReferences(P2V(pa));
   }
   lcr3(V2P(pgdir));
   return d;
 
-// bad:
-//   freevm(d);
-//   return 0;
+bad:
+  freevm(d);
+  return 0;
 }
 
 //PAGEBREAK!
@@ -510,12 +558,47 @@ void onPageFault(uint va){  //va is the wanted address which is not found in ohy
   
   //to get the start of the va's page
   struct proc * p = myproc();
+  //if(p->pid <= 2) return;
+  //cprintf("trap1: pagefault: pid %d\n",p->pid);
   char *va1 = (char *)PGROUNDDOWN(va);
-  pte_t *pte = walkpgdir(p->pgdir,va1,0);
+  pte_t *pte;// = walkpgdir(p->pgdir,va1,0);
+  uint pa,flags;
+
   
+
+  if(va >= KERNBASE || (pte = walkpgdir(p->pgdir, va1, 0)) == 0){
+    cprintf("pid %d %s: Page fault--access to invalid address.\n", p->pid, p->name);
+    p->killed = 1;
+    return;
+  }
+  
+  //cprintf("hi\n");
+
+  if(*pte & PTE_COW){
+    pa = PTE_ADDR(*pte);
+    char *v = P2V(pa);
+    flags = PTE_FLAGS(*pte);
+    int refs = getNumberReferences(v);
+
+    if(refs > 1){
+      char *mem = kalloc();
+      memmove(mem, v, PGSIZE);
+      *pte = V2P(mem) | flags | PTE_P | PTE_W;    
+      decrementReferences(v);
+    }else {
+      *pte |= PTE_W;
+      *pte &= ~PTE_COW;      
+    }
+    lcr3(V2P(p->pgdir));
+  }
+
+  if(p->pid <= 2) return;
+
   if (!(*pte & PTE_PG))
     return;
   
+  //cprintf("trap2: pagefault: pid %d\n",p->pid);
+
   char *ka;
   ka = kalloc();
   if (ka == 0)
@@ -523,7 +606,7 @@ void onPageFault(uint va){  //va is the wanted address which is not found in ohy
     panic("onPageFault: failed on kalloc");
   }
   memset(ka, 0, PGSIZE);
-  uint pa = V2P(ka);
+  pa = V2P(ka);
   uint swapIndx=getPageIndex(IN_SWAP,OCCUPIED,va1);
   if(swapIndx == -1){
     panic("no space on swapFile");
@@ -544,10 +627,8 @@ void onPageFault(uint va){  //va is the wanted address which is not found in ohy
       panic("onPageFault: no free space on swapFile");
 
     //insert the removed page from mem to swapFile
-    //p->swapPmd[swapIndx].pgdir = p->swapPmd[ramIndx].pgdir;
     //ToDo: check if offset is required here
     p->swapPmd[swapIndx].offset = swapIndx*PGSIZE;
-    //p->swapPmd[swapIndx].occupied = 1;
     p->swapPmd[swapIndx] = p->ramPmd[ramIndx];
     //p->pagesInSwapfile++;
    
