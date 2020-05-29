@@ -9,6 +9,8 @@
 #include "mmu.h"
 #include "spinlock.h"
 
+#define MAXPAGES (PHYSTOP / PGSIZE)
+
 void freerange(void *vstart, void *vend);
 extern char end[]; // first address after kernel loaded from ELF file
                    // defined by the kernel linker script in kernel.ld
@@ -26,9 +28,10 @@ struct
   int use_lock;
   struct run *freelist;
   //ToDo: maybe change array size to something else;
-  struct run runArr[PHYSTOP/PGSIZE];
+  struct run runArr[MAXPAGES];
 } kmem;
 
+int occupiedPages;
 // Initialization happens in two phases.
 // 1. main() calls kinit1() while still using entrypgdir to place just
 // the pages mapped by entrypgdir on free list.
@@ -79,9 +82,9 @@ void kfree(char *v)
     cprintf("kfree: wrong ref r %d\n",r->ref);
     panic("kfree: ref");    
   }
-
   r->next = kmem.freelist;
   r->ref = 0;
+  occupiedPages--;
   kmem.freelist = r;
   if(kmem.use_lock)
     release(&kmem.lock);
@@ -120,6 +123,7 @@ char* kalloc(void)
   if (r){
     kmem.freelist = r->next;
     r->ref=1;
+    occupiedPages++;
   }
   if (kmem.use_lock)
     release(&kmem.lock);
@@ -129,6 +133,11 @@ char* kalloc(void)
   return rv;
 }
 
+uint getNumberOfFreePages(){
+  return MAXPAGES - occupiedPages;
+  //return  (kmem.freelist - kmem.runArr);
+}
+  
 
 
 //virtual

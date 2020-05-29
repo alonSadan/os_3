@@ -564,22 +564,18 @@ void onPageFault(uint va){  //va is the wanted address which is not found in ohy
   pte_t *pte;// = walkpgdir(p->pgdir,va1,0);
   uint pa,flags;
 
-  
-
   if(va >= KERNBASE || (pte = walkpgdir(p->pgdir, va1, 0)) == 0){
     cprintf("pid %d %s: Page fault--access to invalid address.\n", p->pid, p->name);
     p->killed = 1;
     return;
   }
   
-  //cprintf("hi\n");
-
   if(*pte & PTE_COW){
     pa = PTE_ADDR(*pte);
     char *v = P2V(pa);
     flags = PTE_FLAGS(*pte);
     int refs = getNumberReferences(v);
-
+    //cprintf("pid:%d refs:%d\n",p->pid,refs);
     if(refs > 1){
       char *mem = kalloc();
       memmove(mem, v, PGSIZE);

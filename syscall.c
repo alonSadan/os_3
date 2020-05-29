@@ -82,6 +82,7 @@ argstr(int n, char **pp)
   return fetchstr(addr, pp);
 }
 
+extern int sys_getNumberOfFreePages(void);
 extern int sys_chdir(void);
 extern int sys_close(void);
 extern int sys_dup(void);
@@ -105,6 +106,7 @@ extern int sys_write(void);
 extern int sys_uptime(void);
 
 static int (*syscalls[])(void) = {
+[SYS_getNumberOfFreePages]		sys_getNumberOfFreePages,
 [SYS_fork]    sys_fork,
 [SYS_exit]    sys_exit,
 [SYS_wait]    sys_wait,
