@@ -6,14 +6,23 @@
 #include "mmu.h"
 #include "proc.h"
 #include "elf.h"
+
 #define IN_SWAP 1
 #define IN_PHY 0
 #define OCCUPIED 1
 #define VACANT 0
 
+#define NONE 0
+#define NFUA 1
+#define LAPA 2
+#define SCIFO 3
+#define AQ 4
 
 extern char data[]; // defined by kernel.ld
 pde_t *kpgdir;      // for use in scheduler()
+
+static uint shiftCounter(int bit, int pageNum);
+static uint countSetBits(uint n); 
 
 // Set up CPU's kernel segment descriptors.
 // Run once on entry on each CPU.
@@ -417,9 +426,9 @@ cowuvm(pde_t *pgdir, uint sz)
     if (!(*pte & PTE_P) && !(*pte & PTE_PG))  //
       panic("copyuvm: page not present");
     
-    //ToDo: check if nessecary
-    if(*pte & PTE_PG){
-      pte = walkpgdir(d,(char *)i,1);
+   
+    if(*pte & PTE_PG){     
+      pte = walkpgdir(d,(char *)i,0); //ToDo: check if need to kalloc here
       *pte |= PTE_PG; //in swapFile
       *pte &= ~PTE_P; //not in ram
       lcr3(V2P(myproc()->pgdir));
@@ -565,7 +574,7 @@ void onPageFault(uint va){  //va is the wanted address which is not found in ohy
   uint pa,flags;
 
   if(va >= KERNBASE || (pte = walkpgdir(p->pgdir, va1, 0)) == 0){
-    cprintf("pid %d %s: Page fault--access to invalid address.\n", p->pid, p->name);
+    cprintf("pid %d %s: Page fault: access to invalid address.\n", p->pid, p->name);
     p->killed = 1;
     return;
   }
@@ -665,6 +674,98 @@ void onPageFault1(char *va1,uint pa,int swapIndx,int ramIndx){
   *pte &= ~PTE_PG; //mark page is not on file  000010100000100010000000000000000000000
   p->ramPmd[ramIndx] = p->swapPmd[swapIndx];   //copy struct from swap data structure to ram data structure
 }
+
+
+void swapInt(int *a, int *b) {
+  int temp = *b;
+  *b = *a;
+  *a = temp;
+}
+
+void updatePageInPriorityQueue(int pageNum){
+  struct proc * p = myproc();
+  pte_t *pte = walkpgdir(p->pgdir,p->ramPmd[pageNum].va,0);
+  #if NFUA
+    if(*pte & PTE_A){
+      if (p->ramPmd[pageNum].occupied)
+        deleteRoot(p->prioArr,pageNum,&p->prioSize);
+      p->ramPmd[pageNum].age = shiftCounter(1,pageNum);
+      insertHeap(p->prioArr,(struct heap_p){pageNum,p->ramPmd[pageNum].age},&p->prioSize);
+      (*pte) &= ~PTE_A;
+    }else{
+      p->ramPmd[pageNum].age = shiftCounter(0,pageNum);
+      insertHeap(p->prioArr,(struct heap_p){pageNum,p->ramPmd[pageNum].age},&p->prioSize);
+    }
+  #endif
+
+  #if LAPA
+    if(*pte & PTE_A){
+      if (p->ramPmd[pageNum].occupied)
+        deleteRoot(p->prioArr,pageNum,&p->prioSize);
+      p->ramPmd[pageNum].age = shiftCounter(1,pageNum);
+      insertHeap(p->prioArr,(struct heap_p){pageNum,countSetBits(p->ramPmd[pageNum].age)},&p->prioSize);
+      (*pte) &= ~PTE_A;
+    }else{
+      p->ramPmd[pageNum].age = shiftCounter(0,pageNum);
+      insertHeap(p->prioArr,(struct heap_p){pageNum,countSetBits(p->ramPmd[pageNum].age)},&p->prioSize);
+    }
+  #endif
+ 
+  #if SCIFO
+    if(*pte & PTE_A){
+      if (p->ramPmd[pageNum].occupied)
+        deleteRoot(p->prioArr,pageNum,&p->prioSize);
+      //pushing page to the end of the list by giving him max prio + 1
+      insertHeap(p->prioArr,(struct heap_p){pageNum,p->prioArr[p->prioSize-1].priority+1},&p->prioSize);
+      (*pte) &= ~PTE_A;
+    }else{
+
+    }
+
+  #endif
+  
+  //ToDo: maybe change AQ to normal linkedlist for better performance (reduce from O(nlogn) to O(n))
+  #if AQ
+    if(*pte & PTE_A){
+      if (p->prioArr[p->prioSize-1].index != pageNum){
+        
+        struct heap_p a = deleteRoot(p->prioArr,pageNum,&p->prioSize); 
+        if (a.index == -1){
+          insertHeap(p->prioArr,(struct heap_p){pageNum,p->prioArr[p->prioSize-1].priority+1},&p->prioSize);
+        }else{
+          int tempSize = p->prioSize;
+          struct heap_p temp[tempSize];
+          for (int i = 0; i < tempSize;i++)temp[i]=p->prioArr[i];
+          while((a = extractMin(temp,&tempSize)).index != pageNum){}
+          struct heap_p b = extractMin(temp,&tempSize);
+          deleteRoot(p->prioArr,a.index,&p->prioSize);
+          deleteRoot(p->prioArr,b.index,&p->prioSize);
+          swapInt(&a.priority,&b.priority);
+          insertHeap(p->prioArr,a,&p->prioSize);
+          insertHeap(p->prioArr,b,&p->prioSize);
+        }
+      }
+    }
+
+  #endif 
+  
+}
+
+static
+uint shiftCounter(int bit, int pageNum){
+  return bit | (myproc()->ramPmd[pageNum].age >> 1);
+}
+
+static
+uint countSetBits(uint n) 
+{ 
+    uint count = 0; 
+    while (n) { 
+        count += n & 1; 
+        n >>= 1; 
+    } 
+    return count; 
+} 
 
 
 //PAGEBREAK!

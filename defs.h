@@ -134,11 +134,11 @@ int wait(void);
 void wakeup(void *);
 void yield(void);
 
-struct freePageInSwap *getNextFreePageAddressInSwap(struct proc *p);
-uint getNextFreePageIndexInSwap(struct proc *);
-uint getPageIndexInSwap(struct proc *, char *);
-uint getPageIndexInMemory(struct proc *, char *);
-uint getNextFreePageIndexInMemory(struct proc *p);
+// struct freePageInSwap *getNextFreePageAddressInSwap(struct proc *p);
+// uint getNextFreePageIndexInSwap(struct proc *);
+// uint getPageIndexInSwap(struct proc *, char *);
+// uint getPageIndexInMemory(struct proc *, char *);
+// uint getNextFreePageIndexInMemory(struct proc *p);
 
 pde_t *
 cowuvm(pde_t *pgdir, uint sz);
