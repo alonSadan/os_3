@@ -91,3 +91,11 @@ struct heap_p extractMin(struct heap_p array[],int *sizePtr){
     return root; 
 }
 
+struct heap_p findInHeap(struct heap_p array[],int pageNum,int *sizePtr){
+  struct heap_p temp = deleteRoot(array,pageNum,sizePtr);
+  if (temp.index != -1){
+    insertHeap(array,temp,sizePtr);
+  }
+  return temp;
+  
+}

@@ -12,18 +12,18 @@
 #define OCCUPIED 1
 #define VACANT 0
 
-#define NONE 0
-#define NFUA 1
-#define LAPA 2
-#define SCIFO 3
-#define AQ 4
+// #define NONE 
+// #define NFUA 
+// #define LAPA 
+// #define SCIFO 
+// #define AQ 
 
 extern char data[]; // defined by kernel.ld
 pde_t *kpgdir;      // for use in scheduler()
 
-static uint shiftCounter(int bit, int pageNum);
-static uint countSetBits(uint n); 
-static void updatePageInPriorityQueue(int pageNum);
+//static uint shiftCounter(int bit, int pageNum);
+//static uint countSetBits(uint n); 
+//static void updatePageInPriorityQueue(int pageNum);
 uint getPageIndexDefault(int inSwapFile,int isOccupied,char *va);
 
 // Set up CPU's kernel segment descriptors.
@@ -233,6 +233,19 @@ int loaduvm(pde_t *pgdir, char *addr, struct inode *ip, uint offset, uint sz)
   return 0;
 }
 
+void insertPageToPrioQueue(int pageNum){
+  struct proc * p = myproc();
+  //remove page if exist
+  if (findInHeap(p->prioArr,pageNum,&p->prioSize).index != -1) 
+    deleteRoot(p->prioArr,pageNum,&p->prioSize);//return;
+  #if NFUA | LAPA
+    insertHeap(p->prioArr,(struct heap_p){pageNum,p->age},&p->prioSize); 
+  #endif 
+  #if SCFIFO | AQ
+    insertHeap(p->prioArr,(struct heap_p){pageNum,p->prioArr[p->prioSize].priority+1},&p->prioSize); 
+  #endif
+}
+
 // Allocate page tables and physical memory to grow process from oldsz to
 // newsz, which need not be page aligned.  Returns new size or 0 on error.
 int allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
@@ -260,7 +273,7 @@ int allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       p->ramPmd[indx].pgdir = pgdir;
       p->ramPmd[indx].occupied = 1;
       ++p->pagesInMemory;
-
+      insertPageToPrioQueue(indx);
     }
     
     mem = kalloc();
@@ -312,7 +325,10 @@ int deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       }
       idex = getPagePgdirIndex(0,pgdir,(char *)a);
       if (idex != -1){
-        if (p->ramPmd[idex].occupied) --p->pagesInMemory;
+        if (p->ramPmd[idex].occupied){
+          --p->pagesInMemory;
+          deleteRoot(p->prioArr,idex,&p->prioSize);
+        } 
         memset(&p->ramPmd[idex],0,sizeof(struct paging_meta_data));
       }
       //ToDo: maybe back to this change
@@ -517,6 +533,8 @@ void swapPages(int memIndex,int swapIndex,pde_t *pgdir ,char *a){
   p->swapPmd[swapIndex].occupied = 1;
   p->swapPmd[swapIndex].va = p->swapPmd[memIndex].va;  
   p->pagesInSwapfile++;
+  writeToSwapFile(p,(char *)PTE_ADDR(p->ramPmd[memIndex].va),swapIndex*PGSIZE,PGSIZE);
+
   //get pyshical adr and clean old page in mempry:
   char *va = p->ramPmd[memIndex].va;
   pte_t *pte = walkpgdir(pgdir,va,0);
@@ -532,27 +550,51 @@ void swapPages(int memIndex,int swapIndex,pde_t *pgdir ,char *a){
   p->ramPmd[memIndex].va = a;
   p->ramPmd[memIndex].pgdir = pgdir;
   p->ramPmd[memIndex].occupied = 1;
+
+  //for task3:
+  p->ramPmd[memIndex].age = 0;
+  insertPageToPrioQueue(memIndex);
 }
+
+// void initPagesInPriorityQueue(){
+//   struct proc * p = myproc();
+//   if (p->prioSize == p->pagesInMemory) 
+//     return;
+  
+//   for (int pageNum = 0; pageNum < MAX_PSYC_PAGES; pageNum++){
+//     if (p->ramPmd[pageNum].occupied){
+//       struct heap_p temp = findInHeap(p->prioArr,pageNum,&p->prioSize);
+//       if (temp.index == -1){
+//         insertPageToPrioQueue(pageNum);
+//       }
+//     }
+//   }
+
+// }
+
 
 uint getPageIndex(int inSwapFile,int isOccupied,char *va)
 {  
-  struct proc *p = myproc();
-
-  
   //ToDo: checks if the page replacements is also when page in
   if (!isOccupied || inSwapFile){
-    getPageIndexDefault(inSwapFile,isOccupied,va);
+    return getPageIndexDefault(inSwapFile,isOccupied,va);
   }
 
-  #if NFUA | LAPA | SCIFO | AQ
-    if (p->prioSize == 0) return -1;
-    else return extractMin(p->prioArr,&p->prioSize).index;
+  #if NFUA | LAPA | SCFIFO | AQ  
+    struct proc *p = myproc();
+    //if (p->prioSize != p->pagesInMemory) 
+      //initPagesInPriorityQueue();
+    if (p->prioSize == 0) 
+      return -1;
+    else return peekHeap(p->prioArr).index;
   #endif 
 
-  //otherwise: default
-  getPageIndexDefault(inSwapFile,isOccupied,va);    
+  #if NONE
+    return getPageIndexDefault(inSwapFile,isOccupied,va);     
+  #endif
 
-  
+  //otherwise: default (none)
+  return getPageIndexDefault(inSwapFile,isOccupied,va);     
 }
 
 uint getPageIndexDefault(int inSwapFile,int isOccupied,char *va){
@@ -581,6 +623,7 @@ uint getPagePgdirIndex(int inSwapFile,pde_t *pgdir,char *va)
   return -1;
 }
 
+char buffer[PGSIZE];
 
 static void onPageFault1(char *va1,uint pa,int swapIndx,int ramIndx);
 
@@ -600,6 +643,7 @@ void onPageFault(uint va){  //va is the wanted address which is not found in ohy
     return;
   }
   
+  //task2:
   if(*pte & PTE_COW){
     pa = PTE_ADDR(*pte);
     char *v = P2V(pa);
@@ -656,6 +700,8 @@ void onPageFault(uint va){  //va is the wanted address which is not found in ohy
     //ToDo: check if offset is required here
     p->swapPmd[swapIndx].offset = swapIndx*PGSIZE;
     p->swapPmd[swapIndx] = p->ramPmd[ramIndx];
+    writeToSwapFile(p,(char *)PTE_ADDR(p->ramPmd[ramIndx].va),swapIndx*PGSIZE,PGSIZE);
+
     //p->pagesInSwapfile++;
    
     //set flags on page in swapfile and save pa for later
@@ -674,7 +720,7 @@ void onPageFault(uint va){  //va is the wanted address which is not found in ohy
     //free the previous physical memory (maybe change it to memset?)
     kfree(P2V(ramPa));
   }
-  memmove((char *)va1, p->swapPmd[swapIndx].va, PGSIZE); //copy page to physical memory 
+  memmove((char *)va1, buffer, PGSIZE); //copy page to physical memory 
 
 
 }
@@ -694,6 +740,12 @@ void onPageFault1(char *va1,uint pa,int swapIndx,int ramIndx){
   *pte |= PTE_P | PTE_W | PTE_U; //to mark page is in mem  
   *pte &= ~PTE_PG; //mark page is not on file  000010100000100010000000000000000000000
   p->ramPmd[ramIndx] = p->swapPmd[swapIndx];   //copy struct from swap data structure to ram data structure
+
+  readFromSwapFile(p,buffer,p->swapPmd[swapIndx].offset,PGSIZE);
+
+  //for task3:
+  p->ramPmd[ramIndx].age = 0;
+  insertPageToPrioQueue(ramIndx);
 }
 
 
@@ -703,25 +755,28 @@ void swapInt(int *a, int *b) {
   *a = temp;
 }
 
-void updatePagesInPriorityQueue(){
-  struct proc * p = myproc();
-  #if NFUA | LAPA
-    for(int i=0; i<MAX_PSYC_PAGES; i++) updatePageInPriorityQueue(i);
-  #endif
-
-  #if SCIFO | AQ
-    int tempSize = p->prioSize;
-    struct heap_p temp[tempSize];
-    for (int i = 0; i < tempSize;i++)temp[i]=p->prioArr[i];
-    while(tempSize) updatePageInPriorityQueue(extractMin(temp,&tempSize).index); 
-  #endif
-
+uint shiftCounter(int bit, int pageNum){
+  return bit | (myproc()->ramPmd[pageNum].age >> 1);
 }
 
-static 
+uint countSetBits(uint n) 
+{ 
+    uint count = 0; 
+    while (n) { 
+        count += n & 1; 
+        n >>= 1; 
+    } 
+    return count; 
+} 
+
+
+
 void updatePageInPriorityQueue(int pageNum){
   struct proc * p = myproc();
   pte_t *pte = walkpgdir(p->pgdir,p->ramPmd[pageNum].va,0);
+  //if(p->pid & *pte){}
+  //insert the priority queue if not already exist
+  
   #if NFUA
     if(*pte & PTE_A){
       if (p->ramPmd[pageNum].occupied)
@@ -748,7 +803,7 @@ void updatePageInPriorityQueue(int pageNum){
     }
   #endif
  
-  #if SCIFO
+  #if SCFIFO
     if(*pte & PTE_A){
       if (p->ramPmd[pageNum].occupied)
         deleteRoot(p->prioArr,pageNum,&p->prioSize);
@@ -787,21 +842,22 @@ void updatePageInPriorityQueue(int pageNum){
   
 }
 
-static
-uint shiftCounter(int bit, int pageNum){
-  return bit | (myproc()->ramPmd[pageNum].age >> 1);
-}
+void updatePagesInPriorityQueue(){
+  struct proc * p = myproc();
+  if (p){}
+  #if NFUA | LAPA
+    for(int i=0; i<MAX_PSYC_PAGES; i++) updatePageInPriorityQueue(i);
+  #endif
 
-static
-uint countSetBits(uint n) 
-{ 
-    uint count = 0; 
-    while (n) { 
-        count += n & 1; 
-        n >>= 1; 
-    } 
-    return count; 
-} 
+  #if SCFIFO | AQ
+    int tempSize = p->prioSize;
+    struct heap_p temp[tempSize];
+    for (int i = 0; i < tempSize;i++)temp[i]=p->prioArr[i];
+    //update pages from sort array
+    while(tempSize) updatePageInPriorityQueue(extractMin(temp,&tempSize).index); 
+  #endif
+
+}
 
 
 //PAGEBREAK!
