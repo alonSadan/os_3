@@ -348,6 +348,8 @@ int wait(void)
         freevm(p->pgdir);
         memset(p->swapPmd,0,MAX_PSYC_PAGES*sizeof(struct paging_meta_data));
         memset(p->ramPmd,0,MAX_PSYC_PAGES*sizeof(struct paging_meta_data));
+        p->pagesInSwapfile = 0;
+        p->pagesInMemory = 0;
 
         p->pid = 0;
         p->parent = 0;

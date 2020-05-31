@@ -214,6 +214,7 @@ uint getPagePgdirIndex(int inSwapFile,pde_t *pgdir,char *va);
 
 void onPageFault(uint va);
 uint getNumberOfFreePages();
+void updatePagesInPriorityQueue();
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x) / sizeof((x)[0]))

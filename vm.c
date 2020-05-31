@@ -23,6 +23,8 @@ pde_t *kpgdir;      // for use in scheduler()
 
 static uint shiftCounter(int bit, int pageNum);
 static uint countSetBits(uint n); 
+static void updatePageInPriorityQueue(int pageNum);
+uint getPageIndexDefault(int inSwapFile,int isOccupied,char *va);
 
 // Set up CPU's kernel segment descriptors.
 // Run once on entry on each CPU.
@@ -535,15 +537,34 @@ void swapPages(int memIndex,int swapIndex,pde_t *pgdir ,char *a){
 uint getPageIndex(int inSwapFile,int isOccupied,char *va)
 {  
   struct proc *p = myproc();
+
+  
+  //ToDo: checks if the page replacements is also when page in
+  if (!isOccupied || inSwapFile){
+    getPageIndexDefault(inSwapFile,isOccupied,va);
+  }
+
+  #if NFUA | LAPA | SCIFO | AQ
+    if (p->prioSize == 0) return -1;
+    else return extractMin(p->prioArr,&p->prioSize).index;
+  #endif 
+
+  //otherwise: default
+  getPageIndexDefault(inSwapFile,isOccupied,va);    
+
+  
+}
+
+uint getPageIndexDefault(int inSwapFile,int isOccupied,char *va){
+  struct proc *p = myproc();
   struct paging_meta_data *pg;
   pg = inSwapFile ? p->swapPmd : p->ramPmd; 
-  
   for (int c = 0; pg < &p->ramPmd[MAX_PSYC_PAGES] || pg < &p->swapPmd[MAX_PSYC_PAGES]; pg++,c++)
-    if(pg->occupied == isOccupied)
-      if (va == null || pg->va == va)
-        return c;
-  
-  return -1;
+      if(pg->occupied == isOccupied)
+        if (va == null || pg->va == va)
+          return c;
+    
+    return -1;
 }
 
 uint getPagePgdirIndex(int inSwapFile,pde_t *pgdir,char *va)
@@ -682,6 +703,22 @@ void swapInt(int *a, int *b) {
   *a = temp;
 }
 
+void updatePagesInPriorityQueue(){
+  struct proc * p = myproc();
+  #if NFUA | LAPA
+    for(int i=0; i<MAX_PSYC_PAGES; i++) updatePageInPriorityQueue(i);
+  #endif
+
+  #if SCIFO | AQ
+    int tempSize = p->prioSize;
+    struct heap_p temp[tempSize];
+    for (int i = 0; i < tempSize;i++)temp[i]=p->prioArr[i];
+    while(tempSize) updatePageInPriorityQueue(extractMin(temp,&tempSize).index); 
+  #endif
+
+}
+
+static 
 void updatePageInPriorityQueue(int pageNum){
   struct proc * p = myproc();
   pte_t *pte = walkpgdir(p->pgdir,p->ramPmd[pageNum].va,0);
@@ -728,7 +765,6 @@ void updatePageInPriorityQueue(int pageNum){
   #if AQ
     if(*pte & PTE_A){
       if (p->prioArr[p->prioSize-1].index != pageNum){
-        
         struct heap_p a = deleteRoot(p->prioArr,pageNum,&p->prioSize); 
         if (a.index == -1){
           insertHeap(p->prioArr,(struct heap_p){pageNum,p->prioArr[p->prioSize-1].priority+1},&p->prioSize);
