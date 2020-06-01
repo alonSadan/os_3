@@ -89,7 +89,8 @@ struct proc
   int pagesInSwapfile;
   struct paging_meta_data swapPmd[MAX_PSYC_PAGES];
   struct paging_meta_data ramPmd[MAX_PSYC_PAGES];
-
+  int pagefaults;
+  int pagedout;
   //struct freePageInSwap *head;
 
   struct heap_p prioArr[MAX_PSYC_PAGES*2+1];

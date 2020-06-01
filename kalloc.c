@@ -9,8 +9,6 @@
 #include "mmu.h"
 #include "spinlock.h"
 
-#define MAXPAGES (PHYSTOP / PGSIZE)
-
 void freerange(void *vstart, void *vend);
 extern char end[]; // first address after kernel loaded from ELF file
                    // defined by the kernel linker script in kernel.ld
@@ -173,5 +171,3 @@ uint getNumberReferences(char *v){
   r = &kmem.runArr[V2P(v)/PGSIZE];
   return r->ref;
 }
-
-

@@ -218,3 +218,6 @@ void updatePagesInPriorityQueue();
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x) / sizeof((x)[0]))
+#define PHYSTOP 0xE000000           // Top physical memory
+#define PGSIZE 4096     // bytes mapped by a page
+#define MAXPAGES (PHYSTOP / PGSIZE)

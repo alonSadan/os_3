@@ -241,6 +241,9 @@ int fork(void)
     np->swapPmd[i].pgdir = np->pgdir;
   }
   
+  np->pagedout = 0;
+  np->pagefaults = 0;
+
   createSwapFile(np);
   int read = 0;
 //int offset = 0;
@@ -293,6 +296,10 @@ void exit(void)
   {
     panic("exit: failed to removeSwapFile");
   }
+
+  #if TRUE
+    procdump();
+  #endif
 
   begin_op();
   iput(curproc->cwd);
@@ -583,13 +590,19 @@ void procdump(void)
       state = states[p->state];
     else
       state = "???";
-    cprintf("%d %s %s", p->pid, state, p->name);
+    cprintf("%d %s %d %d %d %d %s", p->pid, 
+      state,p->pagesInMemory,
+      p->pagesInSwapfile,
+      p->pagefaults,
+      p->pagedout, 
+      p->name);
     if (p->state == SLEEPING)
     {
       getcallerpcs((uint *)p->context->ebp + 2, pc);
       for (i = 0; i < 10 && pc[i] != 0; i++)
         cprintf(" %p", pc[i]);
     }
+    cprintf(" %d / %d free page frames in the system", getNumberOfFreePages(),MAXPAGES );
     cprintf("\n");
   }
 }
