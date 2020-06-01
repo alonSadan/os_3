@@ -80,6 +80,7 @@ void kinit2(void *, void *);
 void incrementReferences(char *);
 void decrementReferences(char *);
 uint getNumberReferences(char *);
+void _kfree(char *v);
 
 // kbd.c
 void kbdintr(void);
@@ -133,11 +134,14 @@ int wait(void);
 void wakeup(void *);
 void yield(void);
 
-struct freePageInSwap *getNextFreePageAddressInSwap(struct proc *p);
-uint getNextFreePageIndexInSwap(struct proc *);
-uint getPageIndexInSwap(struct proc *, char *);
-uint getPageIndexInMemory(struct proc *, char *);
-uint getNextFreePageIndexInMemory(struct proc *p);
+// struct freePageInSwap *getNextFreePageAddressInSwap(struct proc *p);
+// uint getNextFreePageIndexInSwap(struct proc *);
+// uint getPageIndexInSwap(struct proc *, char *);
+// uint getPageIndexInMemory(struct proc *, char *);
+// uint getNextFreePageIndexInMemory(struct proc *p);
+
+pde_t *
+cowuvm(pde_t *pgdir, uint sz);
 
 // swtch.S
 void swtch(struct context **, struct context *);
@@ -209,6 +213,8 @@ uint getPageIndex(int inSwapFile,int isOccupied, char *va);
 uint getPagePgdirIndex(int inSwapFile,pde_t *pgdir,char *va);
 
 void onPageFault(uint va);
+uint getNumberOfFreePages();
+void updatePagesInPriorityQueue();
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x) / sizeof((x)[0]))

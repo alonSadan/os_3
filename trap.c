@@ -33,12 +33,6 @@ void idtinit(void)
 //PAGEBREAK: 41
 void trap(struct trapframe *tf)
 {
-  //int ramIdex;
-  //int swpIdex;
-  //uint adr = rcr2(); //addres of the page we looked for
-  //pte_t *pte;
-  //pde_t *pde;
-  //struct proc *p = myproc();
   if (tf->trapno == T_SYSCALL)
   {
     if (myproc()->killed)
@@ -84,33 +78,6 @@ void trap(struct trapframe *tf)
     lapiceoi();
     break;
   case T_PGFLT:
-  cprintf("trap: pagefault\n");
-    //[eax],eax??    pde = &pgdir[PDX(va)];
-
-    //walkpgdir(pde_t *pgdir, const void *va, int alloc)
-    //walkpgdir(p->pgdir, adr, 0);
-    // pde = &p->pgdir[PDX(adr)];
-    // pte =  (pte_t *)P2V(PTE_ADDR(*pde));
-    // if (*pte & PTE_PG & !PTE_P)
-    // {
-    //   ramIdex = getNextFreePageIndexInMemory(p);
-    //   //ToDo: add swapping method in Task2
-    //   if (ramIdex == -1)
-    //   {
-    //     //do swapping
-    //   }
-    //   swpIdex = getPageIndexInSwap(p, (char*)adr);
-    //   allocuvm(p->pgdir,(uint)(*p->ramPmd[ramIdex].va), (uint)(*p->ramPmd[ramIdex].va) + PGSIZE);
-    //   memmove(p->ramPmd[ramIdex].va, p->swapPmd[swpIdex].va, PGSIZE);
-    //   //p->pagesInMemory[ram_idex] = p->swapPmd[swap_idex].va
-    //   //delete from swap
-    //   p->swapPmd[swpIdex].occupied = 0;
-    //   p->pagesInSwapfile--;
-    // }
-    // else
-    // {
-    //   panic("page not in swapfile");
-    // }
     onPageFault(rcr2());
     break;
 
@@ -140,8 +107,10 @@ void trap(struct trapframe *tf)
   // Force process to give up CPU on clock tick.
   // If interrupts were on while locks held, would need to check nlock.
   if (myproc() && myproc()->state == RUNNING &&
-      tf->trapno == T_IRQ0 + IRQ_TIMER)
+      tf->trapno == T_IRQ0 + IRQ_TIMER){
+    updatePagesInPriorityQueue();
     yield();
+  }
 
   // Check if the process has been killed since we yielded
   if (myproc() && myproc()->killed && (tf->cs & 3) == DPL_USER)

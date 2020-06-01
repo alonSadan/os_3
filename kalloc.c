@@ -9,6 +9,8 @@
 #include "mmu.h"
 #include "spinlock.h"
 
+#define MAXPAGES (PHYSTOP / PGSIZE)
+
 void freerange(void *vstart, void *vend);
 extern char end[]; // first address after kernel loaded from ELF file
                    // defined by the kernel linker script in kernel.ld
@@ -26,9 +28,10 @@ struct
   int use_lock;
   struct run *freelist;
   //ToDo: maybe change array size to something else;
-  struct run runArr[PHYSTOP/PGSIZE];
+  struct run runArr[MAXPAGES];
 } kmem;
 
+int occupiedPages;
 // Initialization happens in two phases.
 // 1. main() calls kinit1() while still using entrypgdir to place just
 // the pages mapped by entrypgdir on free list.
@@ -52,7 +55,7 @@ void freerange(void *vstart, void *vend)
   char *p;
   p = (char *)PGROUNDUP((uint)vstart);
   for (; p + PGSIZE <= (char *)vend; p += PGSIZE)
-    kfree(p);
+    _kfree(p);
 }
 //PAGEBREAK: 21
 // Free the page of physical memory pointed at by v,
@@ -62,6 +65,7 @@ void freerange(void *vstart, void *vend)
 void kfree(char *v)
 {
   struct run *r;
+  //cprintf("Free\n");
 
   if ((uint)v % PGSIZE || v < end || V2P(v) >= PHYSTOP)
     panic("kfree");
@@ -71,25 +75,47 @@ void kfree(char *v)
 
   if (kmem.use_lock)
     acquire(&kmem.lock);
-  r = (struct run *)v;
-  if(r->ref == 0){
-  r->next = kmem.freelist;
-  kmem.freelist = r;
-  if (kmem.use_lock)
-    release(&kmem.lock);
+  r = &kmem.runArr[(V2P(v) / PGSIZE)];
+  //r = (struct run*)v;
+  if (r->ref != 1){
+    //cprintf("a: %d",r->ref);
+    cprintf("kfree: wrong ref r %d\n",r->ref);
+    panic("kfree: ref");    
   }
-  // else{
-  //  --r->ref;
-  // }
+  r->next = kmem.freelist;
+  r->ref = 0;
+  occupiedPages--;
+  kmem.freelist = r;
+  if(kmem.use_lock)
+    release(&kmem.lock);
+}
+
+void
+_kfree(char *v){
+  struct run *r;
+
+  if((uint)v % PGSIZE || v < end || V2P(v) >= PHYSTOP)
+    panic("kfree");
+
+  memset(v, 1, PGSIZE);
+
+  if(kmem.use_lock)
+    acquire(&kmem.lock);
+  r = &kmem.runArr[(V2P(v) / PGSIZE)];
+  r->next = kmem.freelist;
+  r->ref = 0;
+  kmem.freelist = r;
+  if(kmem.use_lock)
+    release(&kmem.lock);
 }
 
 // Allocate one 4096-byte page of physical memory.
 // Returns a pointer that the kernel can use.
 // Returns 0 if the memory cannot be allocated.
-char *
-kalloc(void)
+char* kalloc(void)
 {
   struct run *r;
+  //cprintf("Kalloc\n");
 
   if (kmem.use_lock)
     acquire(&kmem.lock);
@@ -97,13 +123,22 @@ kalloc(void)
   if (r){
     kmem.freelist = r->next;
     r->ref=1;
+    occupiedPages++;
   }
   if (kmem.use_lock)
     release(&kmem.lock);
   
-  char *rv = r ? P2V((r-kmem.runArr)*PGSIZE) : r;
+  //return (char *)r;
+  char *rv = r ? P2V((r - kmem.runArr) * PGSIZE) : r;
   return rv;
 }
+
+uint getNumberOfFreePages(){
+  return MAXPAGES - occupiedPages;
+  //return  (kmem.freelist - kmem.runArr);
+}
+  
+
 
 //virtual
 void incrementReferences(char *v)
@@ -138,4 +173,5 @@ uint getNumberReferences(char *v){
   r = &kmem.runArr[V2P(v)/PGSIZE];
   return r->ref;
 }
+
 

@@ -208,7 +208,7 @@ int fork(void)
   }
 
   // Copy process state from proc.
-  if ((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0)
+  if ((np->pgdir = cowuvm(curproc->pgdir, curproc->sz)) == 0)
   {
     kfree(np->kstack);
     np->kstack = 0;
@@ -348,6 +348,8 @@ int wait(void)
         freevm(p->pgdir);
         memset(p->swapPmd,0,MAX_PSYC_PAGES*sizeof(struct paging_meta_data));
         memset(p->ramPmd,0,MAX_PSYC_PAGES*sizeof(struct paging_meta_data));
+        p->pagesInSwapfile = 0;
+        p->pagesInMemory = 0;
 
         p->pid = 0;
         p->parent = 0;
@@ -592,58 +594,60 @@ void procdump(void)
   }
 }
 
-struct freePageInSwap *getNextFreePageAddressInSwap(struct proc *p)
-{
-  struct freePageInSwap *toreturn = p->head;
-  if (p->head != null)
-  {
-    p->head = p->head->next;
-  }
-  return toreturn;
-}
 
-uint getNextFreePageIndexInSwap(struct proc *p)
-{
-  int i;
-  for (i = 0; i < MAX_PSYC_PAGES; i++)
-  {
-    if (!p->swapPmd[i].occupied)
-      return i;
-  }
-  return -1;
-}
 
-uint getPageIndexInSwap(struct proc *p, char *a)
-{
-  int i;
-  for (i = 0; i < MAX_PSYC_PAGES; i++)
-  {
-    if (p->swapPmd[i].va == a)
-      return i;
-  }
-  return -1;
-}
+// struct freePageInSwap *getNextFreePageAddressInSwap(struct proc *p)
+// {
+//   struct freePageInSwap *toreturn = p->head;
+//   if (p->head != null)
+//   {
+//     p->head = p->head->next;
+//   }
+//   return toreturn;
+// }
 
-uint getPageIndexInMemory(struct proc *p, char *a)
-{
-  int i;
-  for (i = 0; i < MAX_PSYC_PAGES; i++)
-  {
-    if (p->ramPmd[i].va == a)
-      return i;
-  }
-  return -1;
-}
-uint getNextFreePageIndexInMemory(struct proc *p)
-{
-  if(p->pagesInMemory >= MAX_PSYC_PAGES)
-    return -1;
+// uint getNextFreePageIndexInSwap(struct proc *p)
+// {
+//   int i;
+//   for (i = 0; i < MAX_PSYC_PAGES; i++)
+//   {
+//     if (!p->swapPmd[i].occupied)
+//       return i;
+//   }
+//   return -1;
+// }
 
-  int i;
-  for (i = 0; i < MAX_PSYC_PAGES; i++)
-  {
-    if (!p->ramPmd[i].occupied)  
-      return i;
-  }
-  return -1;
-}
+// uint getPageIndexInSwap(struct proc *p, char *a)
+// {
+//   int i;
+//   for (i = 0; i < MAX_PSYC_PAGES; i++)
+//   {
+//     if (p->swapPmd[i].va == a)
+//       return i;
+//   }
+//   return -1;
+// }
+
+// uint getPageIndexInMemory(struct proc *p, char *a)
+// {
+//   int i;
+//   for (i = 0; i < MAX_PSYC_PAGES; i++)
+//   {
+//     if (p->ramPmd[i].va == a)
+//       return i;
+//   }
+//   return -1;
+// }
+// uint getNextFreePageIndexInMemory(struct proc *p)
+// {
+//   if(p->pagesInMemory >= MAX_PSYC_PAGES)
+//     return -1;
+
+//   int i;
+//   for (i = 0; i < MAX_PSYC_PAGES; i++)
+//   {
+//     if (!p->ramPmd[i].occupied)  
+//       return i;
+//   }
+//   return -1;
+// }

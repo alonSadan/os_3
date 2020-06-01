@@ -2,6 +2,9 @@
 #define MAX_PSYC_PAGES 16
 #define MAX_TOTAL_PAGES 32
 
+#include "priorityQueue.h"
+
+
 // Per-CPU state
 struct cpu
 {
@@ -44,14 +47,14 @@ struct paging_meta_data
   uint occupied;
   pde_t *pgdir;
   int offset; //offset in swapFile
-  //int age;
+  uint age;
 };
 
-struct freePageInSwap
-{
-  char *va;
-  struct freePageInSwap *next;
-};
+// struct freePageInSwap
+// {
+//   char *va;
+//   struct freePageInSwap *next;
+// };
 
 enum procstate
 {
@@ -87,7 +90,10 @@ struct proc
   struct paging_meta_data swapPmd[MAX_PSYC_PAGES];
   struct paging_meta_data ramPmd[MAX_PSYC_PAGES];
 
-  struct freePageInSwap *head;
+  //struct freePageInSwap *head;
+
+  struct heap_p prioArr[MAX_PSYC_PAGES*2+1];
+  int prioSize;
 };
 
 
