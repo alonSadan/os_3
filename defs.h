@@ -133,6 +133,9 @@ void userinit(void);
 int wait(void);
 void wakeup(void *);
 void yield(void);
+int wait2(int* memoryPages,int* swapPages,int* pageFaults, int* pagedOut);
+//void getStats(int* memoryPages,int* swapPages,int* pageFaults, int* pagedOut);
+
 
 // struct freePageInSwap *getNextFreePageAddressInSwap(struct proc *p);
 // uint getNextFreePageIndexInSwap(struct proc *);

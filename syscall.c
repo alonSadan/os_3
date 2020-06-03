@@ -104,8 +104,12 @@ extern int sys_unlink(void);
 extern int sys_wait(void);
 extern int sys_write(void);
 extern int sys_uptime(void);
+extern int sys_wait2(void);
+extern int getStats(void);
 
 static int (*syscalls[])(void) = {
+  [SYS_wait]    sys_wait2,
+[SYS_wait]    getStats,
 [SYS_getNumberOfFreePages]		sys_getNumberOfFreePages,
 [SYS_fork]    sys_fork,
 [SYS_exit]    sys_exit,

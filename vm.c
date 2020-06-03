@@ -543,10 +543,10 @@ void swapPages(int memIndex, int swapIndex, pde_t *pgdir, char *a)
   if (swapIndex == -1)
     panic("no space left in swapFile");
 
-  p->swapPmd[swapIndex].pgdir = p->swapPmd[memIndex].pgdir;
+  p->swapPmd[swapIndex].pgdir = p->ramPmd[memIndex].pgdir; 
   p->swapPmd[swapIndex].offset = swapIndex * PGSIZE;
   p->swapPmd[swapIndex].occupied = 1;
-  p->swapPmd[swapIndex].va = p->swapPmd[memIndex].va;
+  p->swapPmd[swapIndex].va = p->ramPmd[memIndex].va; 
   p->pagesInSwapfile++;
   if (writeToSwapFile(p, (char *)PTE_ADDR(p->ramPmd[memIndex].va), swapIndex * PGSIZE, PGSIZE) == -1)
   {
@@ -749,12 +749,15 @@ void onPageFault(uint va)
 
     //alloc ramIndex like the other case .
     va1 = p->ramPmd[ramIndx].va; // this is the va that was originally in the swap file
+    
     pte = walkpgdir(p->pgdir, va1, 0);
     *pte |= pa;                    //insert pa to entry
     *pte |= PTE_P | PTE_W | PTE_U; //to mark page is in mem
     *pte &= ~PTE_PG;               //mark page is not on file
     //free the previous physical memory (maybe change it to memset?)
-    kfree(P2V(ramPa));
+    if(getNumberReferences(P2V(pa)) > 0){
+      kfree(P2V(ramPa));
+    }
   }
   memmove((char *)va1, buffer, PGSIZE); //copy page to physical memory
 }
@@ -904,9 +907,9 @@ void updatePagesInPriorityQueue()
 #endif
 
 #if SCFIFO | AQ
-  int tempSize = p->prioSize;
+  int tempSize = p->prioSize;  //get size of priority queue
   struct heap_p temp[tempSize];
-  for (int i = 0; i < tempSize; i++)
+  for (int i = 0; i < tempSize; i++)   //why go by the order?
     temp[i] = p->prioArr[i];
   //update pages from sort array
   while (tempSize)

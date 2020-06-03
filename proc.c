@@ -121,7 +121,6 @@ found:
     p->ramPmd[i].va = (char *)-1;
     p->swapPmd[i].occupied = 0;
     p->ramPmd[i].occupied = 0;
-    
   }
 
   p->pagesInMemory = 0;
@@ -230,33 +229,38 @@ int fork(void)
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
 
   pid = np->pid;
-  
+
   np->pagesInMemory = curproc->pagesInMemory;
   np->pagesInSwapfile = curproc->pagesInSwapfile;
-  
-  for(int i = 0; i < MAX_PSYC_PAGES; ++i){
+
+  for (int i = 0; i < MAX_PSYC_PAGES; ++i)
+  {
     np->ramPmd[i] = curproc->ramPmd[i];
     np->ramPmd[i].pgdir = np->pgdir;
     np->swapPmd[i] = curproc->swapPmd[i];
     np->swapPmd[i].pgdir = np->pgdir;
   }
-  
+
   np->pagedout = 0;
   np->pagefaults = 0;
 
   createSwapFile(np);
-  int read = 0;
-//int offset = 0;
-  char buffer[PGSIZE/2];
-  
+  int read = 1;
+  //int offset = 0;
+  char buffer[PGSIZE / 2];
+
   //not including 'sh' and 'init'
-  if (curproc->pid > 2){
-    while ((read = readFromSwapFile(curproc, buffer, offset, PGSIZE/2) != 0)){
+  if (curproc->pid > 2)
+  {
+
+    while ((read = readFromSwapFile(curproc, buffer, offset, PGSIZE / 2)) != 0)
+    {
+      cprintf("firk: read is %d\n", read);
       if (read == -1)
         panic("fork: swap file not readable");
       if (writeToSwapFile(np, buffer, offset, read) == -1)
         panic("fork: failed to write buffer to child");
-      
+
       offset += read;
     }
   }
@@ -297,9 +301,9 @@ void exit(void)
     panic("exit: failed to removeSwapFile");
   }
 
-  #if TRUE
-    procdump();
-  #endif
+#if TRUE
+  procdump();
+#endif
 
   begin_op();
   iput(curproc->cwd);
@@ -353,8 +357,8 @@ int wait(void)
         kfree(p->kstack);
         p->kstack = 0;
         freevm(p->pgdir);
-        memset(p->swapPmd,0,MAX_PSYC_PAGES*sizeof(struct paging_meta_data));
-        memset(p->ramPmd,0,MAX_PSYC_PAGES*sizeof(struct paging_meta_data));
+        memset(p->swapPmd, 0, MAX_PSYC_PAGES * sizeof(struct paging_meta_data));
+        memset(p->ramPmd, 0, MAX_PSYC_PAGES * sizeof(struct paging_meta_data));
         p->pagesInSwapfile = 0;
         p->pagesInMemory = 0;
 
@@ -380,7 +384,11 @@ int wait(void)
   }
 }
 
-//PAGEBREAK: 42
+int wait2(int *memoryPages, int *swapPages, int *pageFaults, int *pagedOut)
+{
+  return 0;
+}
+//PAGEBREAK: 4
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -590,24 +598,22 @@ void procdump(void)
       state = states[p->state];
     else
       state = "???";
-    cprintf("%d %s %d %d %d %d %s", p->pid, 
-      state,p->pagesInMemory,
-      p->pagesInSwapfile,
-      p->pagefaults,
-      p->pagedout, 
-      p->name);
+    cprintf("%d %s %d %d %d %d %s", p->pid,
+            state, p->pagesInMemory,
+            p->pagesInSwapfile,
+            p->pagefaults,
+            p->pagedout,
+            p->name);
     if (p->state == SLEEPING)
     {
       getcallerpcs((uint *)p->context->ebp + 2, pc);
       for (i = 0; i < 10 && pc[i] != 0; i++)
         cprintf(" %p", pc[i]);
     }
-    cprintf(" %d / %d free page frames in the system", getNumberOfFreePages(),MAXPAGES );
+    cprintf(" %d / %d free page frames in the system", getNumberOfFreePages(), MAXPAGES);
     cprintf("\n");
   }
 }
-
-
 
 // struct freePageInSwap *getNextFreePageAddressInSwap(struct proc *p)
 // {
@@ -659,7 +665,7 @@ void procdump(void)
 //   int i;
 //   for (i = 0; i < MAX_PSYC_PAGES; i++)
 //   {
-//     if (!p->ramPmd[i].occupied)  
+//     if (!p->ramPmd[i].occupied)
 //       return i;
 //   }
 //   return -1;
