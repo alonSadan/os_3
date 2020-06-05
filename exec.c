@@ -6,7 +6,7 @@
 #include "defs.h"
 #include "x86.h"
 #include "elf.h"
-
+int bkMemNum,bkSwapNum,bkPrioNum;
 int exec(char *path, char **argv)
 {
   char *s, *last;
@@ -38,6 +38,27 @@ int exec(char *path, char **argv)
   if ((pgdir = setupkvm()) == 0)
     goto bad;
 
+  //backup
+  bkMemNum = curproc->pagesInMemory;
+  bkSwapNum =  curproc->pagesInSwapfile;
+  bkPrioNum = curproc->prioSize;
+
+  struct paging_meta_data bkRam[MAX_PSYC_PAGES];
+  struct paging_meta_data bkSwapFile[MAX_PSYC_PAGES];
+  struct heap_p bkPrioArr[MAX_PSYC_PAGES*2+1];
+
+  for (int i = 0; i < MAX_PSYC_PAGES; i++)
+  {
+    bkRam[i] = curproc->ramPmd[i];
+    bkSwapFile[i] = curproc->swapPmd[i];
+  }
+
+  for (int i = 0; i < MAX_PSYC_PAGES*2+1; i++)
+  {
+    bkPrioArr[i] = curproc->prioArr[i];
+  }
+  
+  //reset
   for (int i = 0; i < MAX_PSYC_PAGES; i++)
   {
     curproc->swapPmd[i].va = (char *)-1;
@@ -45,10 +66,10 @@ int exec(char *path, char **argv)
     curproc->swapPmd[i].occupied = 0;
     curproc->ramPmd[i].occupied = 0;
   }
-//  memset(curproc->prioArr, 0, curproc->prioSize * sizeof(struct heap_p));
-//  curproc->prioSize = 0; 
- curproc->pagesInMemory = 0;
- curproc->pagesInSwapfile = 0;
+ 
+  curproc->prioSize = 0; 
+  curproc->pagesInMemory = 0;
+  curproc->pagesInSwapfile = 0;
 
   // Load program into memory.
   sz = 0;
@@ -122,8 +143,9 @@ int exec(char *path, char **argv)
   curproc->tf->eip = elf.entry; // main
   curproc->tf->esp = sp;
 
-//  removeSwapFile(curproc); //remove old swap file and create new one
-//  createSwapFile(curproc);
+  //removeSwapFile(curproc); //remove old swap file and create new one
+  //createSwapFile(curproc);
+  
   //   memset(curproc->swapPmd,0,MAX_PSYC_PAGES*sizeof(struct paging_meta_data));
   // memset(curproc->ramPmd,0,MAX_PSYC_PAGES*sizeof(struct paging_meta_data));
 
@@ -140,5 +162,22 @@ bad:
     iunlockput(ip);
     end_op();
   }
+
+  //resote
+  curproc->pagesInMemory = bkMemNum;
+  curproc->pagesInSwapfile = bkSwapNum;
+  curproc->prioSize = bkPrioNum;
+    
+  for (int i = 0; i < MAX_PSYC_PAGES; i++)
+  {
+    curproc->ramPmd[i] = bkRam[i];
+    curproc->swapPmd[i] = bkSwapFile[i];
+  }
+
+  for (int i = 0; i < MAX_PSYC_PAGES*2+1; i++)
+  {
+    curproc->prioArr[i] = bkPrioArr[i];
+  }
+
   return -1;
 }

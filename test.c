@@ -5,7 +5,7 @@
 void fork_test()
 {
 
-    int pages = 16;
+    int pages = 18;
     char *buf = sbrk(4096 * pages);
 
     for (int i = 0; i < pages; i++)

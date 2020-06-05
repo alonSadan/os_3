@@ -128,7 +128,7 @@ found:
 
   if (p->pid >= 2)
   {
-    removeSwapFile(p);
+    //removeSwapFile(p);
     createSwapFile(p);
   }
 
@@ -304,6 +304,16 @@ void exit(void)
     }
   }
 
+  
+  #if TRUE
+    procdump();
+  #endif
+
+  begin_op();
+  iput(curproc->cwd);
+  end_op();
+  curproc->cwd = 0;
+
   if (curproc->pid > 2)
   {
     if (removeSwapFile(curproc) == -1)
@@ -311,16 +321,8 @@ void exit(void)
       panic("exit: failed to removeSwapFile");
     }
   }
-
-#if TRUE
-  procdump();
-#endif
-
-  begin_op();
-  iput(curproc->cwd);
-  end_op();
-  curproc->cwd = 0;
-
+  
+  
   acquire(&ptable.lock);
 
   // Parent might be sleeping in wait().

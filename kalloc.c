@@ -79,6 +79,9 @@ void kfree(char *v)
   if (r->ref != 1){
     //cprintf("a: %d",r->ref);
     cprintf("kfree: wrong ref r %d\n",r->ref);
+    cprintf("aaa\n");
+    cprintf("aaa\n");
+    cprintf("aaa\n");
     panic("kfree: ref");    
   }
   r->next = kmem.freelist;

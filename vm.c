@@ -376,7 +376,15 @@ void freevm(pde_t *pgdir)
     if (pgdir[i] & PTE_P)
     {
       char *v = P2V(PTE_ADDR(pgdir[i]));
-      kfree(v); //delete physical page
+      if (getNumberReferences(v) == 1)
+      {
+        kfree(v);//delete physical page
+      }
+      else
+      {
+        decrementReferences(v);
+      }
+     // kfree(v); //delete physical page
     }
   }
   kfree((char *)pgdir);
@@ -544,6 +552,7 @@ void swapPages(int memIndex, int swapIndex, pde_t *pgdir, char *a)
 
   if (swapIndex == -1){
     cprintf("swapPages: pid of panic process is %d\n", p->pid);
+    cprintf("bbbb\n");
     panic("no space left in swapFile");
   }
 
@@ -694,6 +703,8 @@ void onPageFault(uint va)
   pte_t *pte; // = walkpgdir(p->pgdir,va1,0);
   uint pa, flags;
 
+  //cprintf("onpagefault:pid:%d va1:%p,error:%d\n",p->pid,va1,p->tf->err);
+
   if (va >= KERNBASE || (pte = walkpgdir(p->pgdir, va1, 0)) == 0)
   {
     cprintf("pid %d %s: Page fault: access to invalid address.\n", p->pid, p->name);
@@ -702,28 +713,34 @@ void onPageFault(uint va)
   }
 
   //task2:
-  if (*pte & PTE_COW)
-  {
-    pa = PTE_ADDR(*pte);
-    char *v = P2V(pa);
-    flags = PTE_FLAGS(*pte);
-    int refs = getNumberReferences(v);
-    //cprintf("pid:%d refs:%d\n",p->pid,refs);
-    if (refs > 1)
-    {
-      //cprintf("when refs are > than 1\n");
+  if(p->tf->err & ERR_WR){
+    if (*pte & PTE_COW){
+      pa = PTE_ADDR(*pte);
+      char *v = P2V(pa);
+      flags = PTE_FLAGS(*pte);
+      int refs = getNumberReferences(v);
       //cprintf("pid:%d refs:%d\n",p->pid,refs);
-      char *mem = kalloc();
-      memmove(mem, v, PGSIZE);
-      *pte = V2P(mem) | flags | PTE_P | PTE_W;
-      decrementReferences(v);
+      if (refs > 1)
+      {
+        //cprintf("when refs are > than 1\n");
+        //cprintf("pid:%d refs:%d\n",p->pid,refs);
+        char *mem = kalloc();
+        memmove(mem, v, PGSIZE);
+        *pte = V2P(mem) | flags | PTE_P | PTE_W;
+        decrementReferences(v);
+      }
+      else
+      {
+        *pte |= PTE_W;
+        *pte &= ~PTE_COW;
+      }
+      lcr3(V2P(p->pgdir));
+    }else{
+      if (!(*pte & PTE_PG)){
+        p->killed = 1;
+        return;
+      }
     }
-    else
-    {
-      *pte |= PTE_W;
-      *pte &= ~PTE_COW;
-    }
-    lcr3(V2P(p->pgdir));
   }
 
   if (!(*pte & PTE_PG))

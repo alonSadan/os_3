@@ -106,6 +106,12 @@ struct segdesc
 #define PTE_PG 0x200 // Paged out to secondary storage
 #define PTE_COW 0x800 // copy on write
 
+// Page fault error codes
+#define ERR_PR		0x00000001	// Page fault caused by protection violation
+#define ERR_WR		0x00000002	// Page fault caused by a write
+#define ERR_U		0x00000004	// Page fault occured while in user mode
+
+
 // Address in page table or page directory entry
 #define PTE_ADDR(pte) ((uint)(pte) & ~0xFFF)
 #define PTE_FLAGS(pte) ((uint)(pte)&0xFFF)
