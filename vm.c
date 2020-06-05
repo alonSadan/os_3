@@ -12,6 +12,8 @@
 #define OCCUPIED 1
 #define VACANT 0
 
+#define BUF_SIZE (PGSIZE/4)
+
 // #define NONE
 // #define NFUA
 // #define LAPA
@@ -541,6 +543,18 @@ int copyout(pde_t *pgdir, uint va, void *p, uint len)
   return 0;
 }
 
+
+void writeToSwapFileWrapper(struct proc * p, char* buffer, uint placeOnFile, uint size){
+  int start = placeOnFile;
+  for (int i = 0; i < size/BUF_SIZE; i++)
+  {
+    if(writeToSwapFile(p,buffer+(BUF_SIZE*i),start+(i*BUF_SIZE),BUF_SIZE) == -1)
+      panic("writeToSwapFileWrapper failed");
+  }
+  
+}
+
+
 //
 void swapPages(int memIndex, int swapIndex, pde_t *pgdir, char *a)
 {
@@ -562,10 +576,14 @@ void swapPages(int memIndex, int swapIndex, pde_t *pgdir, char *a)
   p->swapPmd[swapIndex].occupied = 1;
   p->swapPmd[swapIndex].va = p->ramPmd[memIndex].va;
   p->pagesInSwapfile++;
-  if (writeToSwapFile(p, (char *)PTE_ADDR(p->ramPmd[memIndex].va), swapIndex * PGSIZE, PGSIZE) == -1)
-  {
-    panic("swapPages: failed to write to swap file");
-  }
+
+  // if (writeToSwapFile(p, (char *)PTE_ADDR(p->ramPmd[memIndex].va), swapIndex * PGSIZE, PGSIZE) == -1)
+  // {
+  //   panic("swapPages: failed to write to swap file");
+  // }
+  writeToSwapFileWrapper(p, (char *)PTE_ADDR(p->ramPmd[memIndex].va), swapIndex * PGSIZE, PGSIZE);
+ 
+  
   p->pagedout++;
 
   //get pyshical adr and clean old page in memory:
@@ -725,6 +743,13 @@ void onPageFault(uint va)
         //cprintf("when refs are > than 1\n");
         //cprintf("pid:%d refs:%d\n",p->pid,refs);
         char *mem = kalloc();
+        if (mem == 0)
+        {
+          cprintf("onpagefault out of memory\n");
+          p->killed = 1;
+          return;
+        }
+
         memmove(mem, v, PGSIZE);
         *pte = V2P(mem) | flags | PTE_P | PTE_W;
         decrementReferences(v);
@@ -740,6 +765,12 @@ void onPageFault(uint va)
         p->killed = 1;
         return;
       }
+    }
+  }else{
+    if (!(*pte & PTE_PG)){
+      p->killed = 1;
+      p->tf->cs |= DPL_USER; //big 'plaster'
+      return;
     }
   }
 
@@ -793,7 +824,10 @@ void onPageFault(uint va)
     //ToDo: check if offset is required here
     p->swapPmd[swapIndx] = tmp; //tmp holds the page we swapped out
     p->swapPmd[swapIndx].offset = swapIndx * PGSIZE;
-    writeToSwapFile(p, (char *)PTE_ADDR(p->swapPmd[swapIndx].va), swapIndx * PGSIZE, PGSIZE); //write the data of the page we inserted to swap file
+    //writeToSwapFile(p, (char *)PTE_ADDR(p->swapPmd[swapIndx].va), swapIndx * PGSIZE, PGSIZE); //write the data of the page we inserted to swap file
+    writeToSwapFileWrapper(p, (char *)PTE_ADDR(p->swapPmd[swapIndx].va), swapIndx * PGSIZE, PGSIZE); //write the data of the page we inserted to swap file
+
+
     p->pagedout++;
     //p->pagesInSwapfile++;
 
@@ -824,6 +858,17 @@ void onPageFault(uint va)
   memmove((char *)va1, buffer, PGSIZE); //copy page to physical memory
 }
 
+void readFromSwapFileWrapper(struct proc * p, char* buffer, uint placeOnFile, uint size){
+  int start = placeOnFile;
+  for (int i = 0; i < size/BUF_SIZE; i++)
+  {
+    if(readFromSwapFile(p,buffer+(BUF_SIZE*i),start+(i*BUF_SIZE),BUF_SIZE) == -1)
+      panic("writeToSwapFileWrapper failed");
+  }
+  
+}
+
+
 static void onPageFault1(char *va1, uint pa, int swapIndx, int ramIndx)
 {
   struct proc *p = myproc();
@@ -840,7 +885,8 @@ static void onPageFault1(char *va1, uint pa, int swapIndx, int ramIndx)
   *pte &= ~PTE_PG;                           //mark page is not on file  000010100000100010000000000000000000000
   p->ramPmd[ramIndx] = p->swapPmd[swapIndx]; //copy struct from swap data structure to ram data structure
   p->swapPmd[swapIndx].occupied = 0;
-  readFromSwapFile(p, buffer, p->swapPmd[swapIndx].offset, PGSIZE);
+  //readFromSwapFile(p, buffer, p->swapPmd[swapIndx].offset, PGSIZE);
+  readFromSwapFileWrapper(p, buffer, p->swapPmd[swapIndx].offset, PGSIZE);
 
   //for task3:
   p->ramPmd[ramIndx].age = 0;
