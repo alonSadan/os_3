@@ -7,12 +7,11 @@
 #include "x86.h"
 #include "elf.h"
 
-int
-exec(char *path, char **argv)
+int exec(char *path, char **argv)
 {
   char *s, *last;
   int i, off;
-  uint argc, sz, sp, ustack[3+MAXARG+1];
+  uint argc, sz, sp, ustack[3 + MAXARG + 1];
   struct elfhdr elf;
   struct inode *ip;
   struct proghdr ph;
@@ -21,7 +20,8 @@ exec(char *path, char **argv)
 
   begin_op();
 
-  if((ip = namei(path)) == 0){
+  if ((ip = namei(path)) == 0)
+  {
     end_op();
     cprintf("exec: fail\n");
     return -1;
@@ -30,15 +30,14 @@ exec(char *path, char **argv)
   pgdir = 0;
 
   // Check ELF header
-  if(readi(ip, (char*)&elf, 0, sizeof(elf)) != sizeof(elf))
+  if (readi(ip, (char *)&elf, 0, sizeof(elf)) != sizeof(elf))
     goto bad;
-  if(elf.magic != ELF_MAGIC)
-    goto bad;
-
-  if((pgdir = setupkvm()) == 0)
+  if (elf.magic != ELF_MAGIC)
     goto bad;
 
-  
+  if ((pgdir = setupkvm()) == 0)
+    goto bad;
+
   for (int i = 0; i < MAX_PSYC_PAGES; i++)
   {
     curproc->swapPmd[i].va = (char *)-1;
@@ -46,26 +45,28 @@ exec(char *path, char **argv)
     curproc->swapPmd[i].occupied = 0;
     curproc->ramPmd[i].occupied = 0;
   }
-
-  curproc->pagesInMemory = 0;
-  curproc->pagesInSwapfile = 0;
+//  memset(curproc->prioArr, 0, curproc->prioSize * sizeof(struct heap_p));
+//  curproc->prioSize = 0; 
+ curproc->pagesInMemory = 0;
+ curproc->pagesInSwapfile = 0;
 
   // Load program into memory.
   sz = 0;
-  for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
-    if(readi(ip, (char*)&ph, off, sizeof(ph)) != sizeof(ph))
+  for (i = 0, off = elf.phoff; i < elf.phnum; i++, off += sizeof(ph))
+  {
+    if (readi(ip, (char *)&ph, off, sizeof(ph)) != sizeof(ph))
       goto bad;
-    if(ph.type != ELF_PROG_LOAD)
+    if (ph.type != ELF_PROG_LOAD)
       continue;
-    if(ph.memsz < ph.filesz)
+    if (ph.memsz < ph.filesz)
       goto bad;
-    if(ph.vaddr + ph.memsz < ph.vaddr)
+    if (ph.vaddr + ph.memsz < ph.vaddr)
       goto bad;
-    if((sz = allocuvm(pgdir, sz, ph.vaddr + ph.memsz)) == 0)   //allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
+    if ((sz = allocuvm(pgdir, sz, ph.vaddr + ph.memsz)) == 0) //allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       goto bad;
-    if(ph.vaddr % PGSIZE != 0)
+    if (ph.vaddr % PGSIZE != 0)
       goto bad;
-    if(loaduvm(pgdir, (char*)ph.vaddr, ip, ph.off, ph.filesz) < 0)
+    if (loaduvm(pgdir, (char *)ph.vaddr, ip, ph.off, ph.filesz) < 0)
       goto bad;
   }
   iunlockput(ip);
@@ -75,62 +76,67 @@ exec(char *path, char **argv)
   // Allocate two pages at the next page boundary.
   // Make the first inaccessible.  Use the second as the user stack.
   sz = PGROUNDUP(sz);
-  if((sz = allocuvm(pgdir, sz, sz + 2*PGSIZE)) == 0)
+  if ((sz = allocuvm(pgdir, sz, sz + 2 * PGSIZE)) == 0)
     goto bad;
-  clearpteu(pgdir, (char*)(sz - 2*PGSIZE));
+  clearpteu(pgdir, (char *)(sz - 2 * PGSIZE));
   sp = sz;
 
   // Push argument strings, prepare rest of stack in ustack.
-  for(argc = 0; argv[argc]; argc++) {
-    if(argc >= MAXARG)
+  for (argc = 0; argv[argc]; argc++)
+  {
+    if (argc >= MAXARG)
       goto bad;
     sp = (sp - (strlen(argv[argc]) + 1)) & ~3;
-    if(copyout(pgdir, sp, argv[argc], strlen(argv[argc]) + 1) < 0)
+    if (copyout(pgdir, sp, argv[argc], strlen(argv[argc]) + 1) < 0)
       goto bad;
-    ustack[3+argc] = sp;
+    ustack[3 + argc] = sp;
   }
-  ustack[3+argc] = 0;
+  ustack[3 + argc] = 0;
 
-  ustack[0] = 0xffffffff;  // fake return PC
+  ustack[0] = 0xffffffff; // fake return PC
   ustack[1] = argc;
-  ustack[2] = sp - (argc+1)*4;  // argv pointer
+  ustack[2] = sp - (argc + 1) * 4; // argv pointer
 
-  sp -= (3+argc+1) * 4;
-  if(copyout(pgdir, sp, ustack, (3+argc+1)*4) < 0)
+  sp -= (3 + argc + 1) * 4;
+  if (copyout(pgdir, sp, ustack, (3 + argc + 1) * 4) < 0)
     goto bad;
 
   // Save program name for debugging.
-  for(last=s=path; *s; s++)
-    if(*s == '/')
-      last = s+1;
+  for (last = s = path; *s; s++)
+    if (*s == '/')
+      last = s + 1;
   safestrcpy(curproc->name, last, sizeof(curproc->name));
 
-  for(int i=0;i < MAX_PSYC_PAGES;i++){
-    if (curproc->ramPmd[i].occupied) curproc->ramPmd[i].pgdir = pgdir;
-    if (curproc->swapPmd[i].occupied) curproc->swapPmd[i].pgdir = pgdir;
+  for (int i = 0; i < MAX_PSYC_PAGES; i++)  //mark new memory as free
+  {
+    if (curproc->ramPmd[i].occupied)
+      curproc->ramPmd[i].pgdir = pgdir;
+    if (curproc->swapPmd[i].occupied)
+      curproc->swapPmd[i].pgdir = pgdir;
   }
 
   // Commit to the user image.
   oldpgdir = curproc->pgdir;
   curproc->pgdir = pgdir;
   curproc->sz = sz;
-  curproc->tf->eip = elf.entry;  // main
+  curproc->tf->eip = elf.entry; // main
   curproc->tf->esp = sp;
-  
-  removeSwapFile(curproc); //remove old swap file and create new one
-  createSwapFile(curproc);
-        //   memset(curproc->swapPmd,0,MAX_PSYC_PAGES*sizeof(struct paging_meta_data));
-        // memset(curproc->ramPmd,0,MAX_PSYC_PAGES*sizeof(struct paging_meta_data));
+
+//  removeSwapFile(curproc); //remove old swap file and create new one
+//  createSwapFile(curproc);
+  //   memset(curproc->swapPmd,0,MAX_PSYC_PAGES*sizeof(struct paging_meta_data));
+  // memset(curproc->ramPmd,0,MAX_PSYC_PAGES*sizeof(struct paging_meta_data));
 
   switchuvm(curproc);
   freevm(oldpgdir);
   return 0;
 
- bad:
+bad:
   cprintf("exec: bad scenario");
-  if(pgdir)
+  if (pgdir)
     freevm(pgdir);
-  if(ip){
+  if (ip)
+  {
     iunlockput(ip);
     end_op();
   }

@@ -71,9 +71,10 @@ void kfree(char *v)
   // Fill with junk to catch dangling refs.
   memset(v, 1, PGSIZE);
 
-  if (kmem.use_lock)
+  if(kmem.use_lock){
     acquire(&kmem.lock);
-  r = &kmem.runArr[(V2P(v) / PGSIZE)];
+  }
+    r = &kmem.runArr[(V2P(v) / PGSIZE)];
   //r = (struct run*)v;
   if (r->ref != 1){
     //cprintf("a: %d",r->ref);

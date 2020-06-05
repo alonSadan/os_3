@@ -4,8 +4,9 @@
 
 void fork_test()
 {
+
     int pages = 16;
-    char *buf = malloc(4096 * pages);
+    char *buf = sbrk(4096 * pages);
 
     for (int i = 0; i < pages; i++)
     {
@@ -14,12 +15,13 @@ void fork_test()
 
     if (fork() == 0)
     {
-        printf(1, "heeeeeeeeeeeeeeeeeeeeeeeeer\n");
 
         for (int i = 0; i < pages; i++)
         {
             printf(1, "child data: %c\n", buf[i * 4096]);
         }
+
+        printf(1, "wrtting b\n");
 
         for (int i = 0; i < pages; i++)
         {
@@ -30,6 +32,7 @@ void fork_test()
         {
             printf(1, "child data after change: %c\n", buf[i * 4096]);
         }
+        printf(1, "child ended  in test\n");
     }
     else
     {
@@ -38,7 +41,8 @@ void fork_test()
             printf(1, "father data: %c\n", buf[i * 4096]);
         }
         wait();
-    }
+        free(buf);
+    } 
 }
 
 void test1()
@@ -64,6 +68,6 @@ void test1()
 int main(int argc, char *argv[])
 {
     fork_test();
-    test1();
+//    test1();
     exit();
 }

@@ -126,6 +126,12 @@ found:
   p->pagesInMemory = 0;
   p->pagesInSwapfile = 0;
 
+  if (p->pid >= 2)
+  {
+    removeSwapFile(p);
+    createSwapFile(p);
+  }
+
   // p->head = null;
 
   return p;
@@ -208,7 +214,7 @@ int fork(void)
 
   // Copy process state from proc.
   if ((np->pgdir = cowuvm(curproc->pgdir, curproc->sz)) == 0)
-  {
+  { //if cowuvm fails so
     kfree(np->kstack);
     np->kstack = 0;
     np->state = UNUSED;
@@ -240,11 +246,14 @@ int fork(void)
     np->swapPmd[i] = curproc->swapPmd[i];
     np->swapPmd[i].pgdir = np->pgdir;
   }
-
+  np->prioSize = curproc->prioSize;
+  for (int i = 0; i < curproc->prioSize; i++)
+  {
+    np->prioArr[i] = curproc->prioArr[i];
+  }
   np->pagedout = 0;
   np->pagefaults = 0;
 
-  createSwapFile(np);
   int read = 1;
   //int offset = 0;
   char buffer[PGSIZE / 2];
@@ -255,7 +264,6 @@ int fork(void)
 
     while ((read = readFromSwapFile(curproc, buffer, offset, PGSIZE / 2)) != 0)
     {
-      cprintf("firk: read is %d\n", read);
       if (read == -1)
         panic("fork: swap file not readable");
       if (writeToSwapFile(np, buffer, offset, read) == -1)
@@ -296,9 +304,12 @@ void exit(void)
     }
   }
 
-  if (removeSwapFile(curproc) == -1)
+  if (curproc->pid > 2)
   {
-    panic("exit: failed to removeSwapFile");
+    if (removeSwapFile(curproc) == -1)
+    {
+      panic("exit: failed to removeSwapFile");
+    }
   }
 
 #if TRUE
@@ -354,13 +365,18 @@ int wait(void)
       {
         // Found one.
         pid = p->pid;
-        kfree(p->kstack);
+        if (getNumberReferences(p->kstack) == 1)
+        {
+          kfree(p->kstack);
+        }
         p->kstack = 0;
         freevm(p->pgdir);
         memset(p->swapPmd, 0, MAX_PSYC_PAGES * sizeof(struct paging_meta_data));
         memset(p->ramPmd, 0, MAX_PSYC_PAGES * sizeof(struct paging_meta_data));
         p->pagesInSwapfile = 0;
         p->pagesInMemory = 0;
+        memset(p->prioArr, 0, p->prioSize * sizeof(struct heap_p));
+        p->prioSize = 0;
 
         p->pid = 0;
         p->parent = 0;

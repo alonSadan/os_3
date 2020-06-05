@@ -241,8 +241,8 @@ void insertPageToPrioQueue(int pageNum)
   if (findInHeap(p->prioArr, pageNum, &p->prioSize).index != -1)
     deleteRoot(p->prioArr, pageNum, &p->prioSize); //return;
 
-#if NFUA 
-  p->ramPmd[pageNum].age = 0;  
+#if NFUA
+  p->ramPmd[pageNum].age = 0;
   insertHeap(p->prioArr, (struct heap_p){pageNum, p->ramPmd[pageNum].age}, &p->prioSize);
 #endif
 #if LAPA
@@ -337,7 +337,7 @@ int deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       {
         decrementReferences(v);
       }
-      idex = getPagePgdirIndex(0, pgdir, (char *)a);
+      idex = getPagePgdirIndex(IN_PHY, pgdir, (char *)a);
       if (idex != -1)
       {
         if (p->ramPmd[idex].occupied)
@@ -425,8 +425,8 @@ copyuvm(pde_t *pgdir, uint sz)
     flags = PTE_FLAGS(*pte);
     if ((mem = kalloc()) == 0)
       goto bad;
-    memmove(mem, (char *)P2V(pa), PGSIZE);
-    if (mappages(d, (void *)i, PGSIZE, V2P(mem), flags) < 0)
+    memmove(mem, (char *)P2V(pa), PGSIZE);                   //we need to copy the data from the parent page the the child page we just allocated
+    if (mappages(d, (void *)i, PGSIZE, V2P(mem), flags) < 0) //and map the virtual address to the physical addres we just allocated
     {
       kfree(mem);
       goto bad;
@@ -463,6 +463,8 @@ cowuvm(pde_t *pgdir, uint sz)
       pte = walkpgdir(d, (char *)i, 0); //ToDo: check if need to kalloc here
       *pte |= PTE_PG;                   //in swapFile
       *pte &= ~PTE_P;                   //not in ram
+      *pte |= PTE_COW;
+      *pte &= ~PTE_W;
       lcr3(V2P(myproc()->pgdir));
       continue;
     }
@@ -540,13 +542,16 @@ void swapPages(int memIndex, int swapIndex, pde_t *pgdir, char *a)
   if (memIndex == -1)
     panic("no valid memIndex");
 
-  if (swapIndex == -1)
+  if (swapIndex == -1){
+    cprintf("swapPages: pid of panic process is %d\n", p->pid);
     panic("no space left in swapFile");
+  }
 
-  p->swapPmd[swapIndex].pgdir = p->ramPmd[memIndex].pgdir; 
+
+  p->swapPmd[swapIndex].pgdir = p->ramPmd[memIndex].pgdir;
   p->swapPmd[swapIndex].offset = swapIndex * PGSIZE;
   p->swapPmd[swapIndex].occupied = 1;
-  p->swapPmd[swapIndex].va = p->ramPmd[memIndex].va; 
+  p->swapPmd[swapIndex].va = p->ramPmd[memIndex].va;
   p->pagesInSwapfile++;
   if (writeToSwapFile(p, (char *)PTE_ADDR(p->ramPmd[memIndex].va), swapIndex * PGSIZE, PGSIZE) == -1)
   {
@@ -554,11 +559,18 @@ void swapPages(int memIndex, int swapIndex, pde_t *pgdir, char *a)
   }
   p->pagedout++;
 
-  //get pyshical adr and clean old page in mempry:
+  //get pyshical adr and clean old page in memory:
   char *va = p->ramPmd[memIndex].va;
   pte_t *pte = walkpgdir(pgdir, va, 0);
   uint pa = PTE_ADDR(*pte);
-  kfree(P2V(pa));
+  if (getNumberReferences(P2V(pa)) == 1)
+  {
+    kfree(P2V(pa));
+  }
+  else
+  {
+    decrementReferences(P2V(pa));
+  }
   p->ramPmd[memIndex].occupied = 0;
   //set flags for page in swapfile and update address in pte
   pte = walkpgdir(pgdir, p->swapPmd[swapIndex].va, 0);
@@ -622,10 +634,32 @@ uint getPageIndexDefault(int inSwapFile, int isOccupied, char *va)
   struct proc *p = myproc();
   struct paging_meta_data *pg;
   pg = inSwapFile ? p->swapPmd : p->ramPmd;
-  for (int c = 0; pg < &p->ramPmd[MAX_PSYC_PAGES] || pg < &p->swapPmd[MAX_PSYC_PAGES]; pg++, c++)
-    if (pg->occupied == isOccupied)
-      if (va == null || pg->va == va)
-        return c;
+  if (inSwapFile)
+  {
+    for (int c = 0; pg < &p->swapPmd[MAX_PSYC_PAGES]; pg++, c++)
+    {
+      if (pg->occupied == isOccupied)
+      {
+        if (va == null || pg->va == va)
+        {
+          return c;
+        }
+      }
+    }
+  }
+  else
+  {
+    for (int c = 0; pg < &p->ramPmd[MAX_PSYC_PAGES]; pg++, c++)
+    {
+      if (pg->occupied == isOccupied)
+      {
+        if (va == null || pg->va == va)
+        {
+          return c;
+        }
+      }
+    }
+  }
 
   return -1;
 }
@@ -695,7 +729,6 @@ void onPageFault(uint va)
   if (!(*pte & PTE_PG))
     return;
 
-
   if (p->pid <= 2)
     return;
 
@@ -715,7 +748,7 @@ void onPageFault(uint va)
     panic("no space on swapFile");
   }
 
-  uint ramIndx = getPageIndex(IN_PHY, VACANT, null);
+  uint ramIndx = p->pagesInMemory == MAX_PSYC_PAGES ? -1 : getPageIndex(IN_PHY, VACANT, null);
 
   if (p->pagesInMemory < MAX_PSYC_PAGES)
   {
@@ -723,25 +756,32 @@ void onPageFault(uint va)
     --p->pagesInSwapfile;
     ++p->pagesInMemory;
   }
-  else
+  else                                              // no place in physical memory,and the required  page is in swap file
   {                                                 //we dont have place in physical memory.
-    ramIndx = getPageIndex(IN_PHY, OCCUPIED, null); //get some physical index
-    onPageFault1(va1, pa, swapIndx, ramIndx);       // set flags to point that the page is in physical memory, and update physical data structure
-    swapIndx = getPageIndex(IN_SWAP, VACANT, null); // get a vacant index in swap data structure
+    ramIndx = getPageIndex(IN_PHY, OCCUPIED, null); //get some physical index to be cleared
+    struct paging_meta_data tmp;
+    tmp = p->ramPmd[ramIndx];                       //use tmp for swapping
+    onPageFault1(va1, pa, swapIndx, ramIndx);       // set flags to point that the page is in physical memory, and update physical data structure, mark place in swap as vacant
+    swapIndx = getPageIndex(IN_SWAP, VACANT, null); // get a vacant index in swap data structure, after we cleared it in previous line
 
     if (swapIndx == -1)
+    {
+      swapIndx = getPageIndex(IN_SWAP, VACANT, null); // get a vacant index in swap data structure
+      cprintf("onPageFault pages in swap file %d\n", p->pagesInSwapfile);
+      swapIndx = getPageIndex(IN_SWAP, VACANT, null); // get a vacant index in swap data structure
       panic("onPageFault: no free space on swapFile");
+    }
 
     //insert the removed page from mem to swapFile
     //ToDo: check if offset is required here
+    p->swapPmd[swapIndx] = tmp; //tmp holds the page we swapped out
     p->swapPmd[swapIndx].offset = swapIndx * PGSIZE;
-    p->swapPmd[swapIndx] = p->ramPmd[ramIndx];
-    writeToSwapFile(p, (char *)PTE_ADDR(p->ramPmd[ramIndx].va), swapIndx * PGSIZE, PGSIZE);
+    writeToSwapFile(p, (char *)PTE_ADDR(p->swapPmd[swapIndx].va), swapIndx * PGSIZE, PGSIZE); //write the data of the page we inserted to swap file
     p->pagedout++;
     //p->pagesInSwapfile++;
 
     //set flags on page in swapfile and save pa for later
-    pte = walkpgdir(p->pgdir, p->ramPmd[ramIndx].va, 0);
+    pte = walkpgdir(p->pgdir, p->swapPmd[swapIndx].va, 0);
     uint ramPa = PTE_ADDR(*pte);
     *pte |= PTE_PG; //in swapFile
     *pte &= ~PTE_P; //not in ram
@@ -749,14 +789,19 @@ void onPageFault(uint va)
 
     //alloc ramIndex like the other case .
     va1 = p->ramPmd[ramIndx].va; // this is the va that was originally in the swap file
-    
+
     pte = walkpgdir(p->pgdir, va1, 0);
     *pte |= pa;                    //insert pa to entry
     *pte |= PTE_P | PTE_W | PTE_U; //to mark page is in mem
     *pte &= ~PTE_PG;               //mark page is not on file
-    //free the previous physical memory (maybe change it to memset?)
-    if(getNumberReferences(P2V(pa)) > 0){
+                                   //free the previous physical memory (maybe change it to memset?)
+    if (getNumberReferences(P2V(ramPa)) == 1)
+    {
       kfree(P2V(ramPa));
+    }
+    else
+    {
+      decrementReferences(P2V(ramPa));
     }
   }
   memmove((char *)va1, buffer, PGSIZE); //copy page to physical memory
@@ -777,7 +822,7 @@ static void onPageFault1(char *va1, uint pa, int swapIndx, int ramIndx)
   *pte |= PTE_P | PTE_W | PTE_U;             //to mark page is in mem
   *pte &= ~PTE_PG;                           //mark page is not on file  000010100000100010000000000000000000000
   p->ramPmd[ramIndx] = p->swapPmd[swapIndx]; //copy struct from swap data structure to ram data structure
-
+  p->swapPmd[swapIndx].occupied = 0;
   readFromSwapFile(p, buffer, p->swapPmd[swapIndx].offset, PGSIZE);
 
   //for task3:
@@ -819,7 +864,7 @@ void updatePageInPriorityQueue(int pageNum)
   if (*pte & PTE_A)
   {
     if (p->ramPmd[pageNum].occupied)
-      deleteRoot(p->prioArr, pageNum, &p->prioSize);  //we delete node from heap to make sure replace pld node with new node
+      deleteRoot(p->prioArr, pageNum, &p->prioSize); //we delete node from heap to make sure replace pld node with new node
     p->ramPmd[pageNum].age = shiftCounter(1, pageNum);
     insertHeap(p->prioArr, (struct heap_p){pageNum, p->ramPmd[pageNum].age}, &p->prioSize);
     (*pte) &= ~PTE_A;
@@ -907,9 +952,9 @@ void updatePagesInPriorityQueue()
 #endif
 
 #if SCFIFO | AQ
-  int tempSize = p->prioSize;  //get size of priority queue
+  int tempSize = p->prioSize; //get size of priority queue
   struct heap_p temp[tempSize];
-  for (int i = 0; i < tempSize; i++)   //why go by the order?
+  for (int i = 0; i < tempSize; i++) //why go by the order?
     temp[i] = p->prioArr[i];
   //update pages from sort array
   while (tempSize)
