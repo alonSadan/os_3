@@ -59,13 +59,15 @@ int exec(char *path, char **argv)
   }
   
   //reset
-  for (int i = 0; i < MAX_PSYC_PAGES; i++)
-  {
-    curproc->swapPmd[i].va = (char *)-1;
-    curproc->ramPmd[i].va = (char *)-1;
-    curproc->swapPmd[i].occupied = 0;
-    curproc->ramPmd[i].occupied = 0;
-  }
+  initPmdArr(curproc,curproc->ramPmd);
+  initPmdArr(curproc,curproc->swapPmd);
+  // for (int i = 0; i < MAX_PSYC_PAGES; i++)
+  // {
+  //   curproc->swapPmd[i].va = (char *)-1;
+  //   curproc->ramPmd[i].va = (char *)-1;
+  //   curproc->swapPmd[i].occupied = 0;
+  //   curproc->ramPmd[i].occupied = 0;
+  // }
  
   curproc->prioSize = 0; 
   curproc->pagesInMemory = 0;

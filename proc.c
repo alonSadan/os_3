@@ -215,7 +215,7 @@ int fork(void)
   }
 
   //cprintf("fork np pid:%d\n",np->pid);
-
+    
   // Copy process state from proc.
   if ((np->pgdir = cowuvm(curproc->pgdir, curproc->sz)) == 0)
   { //if cowuvm fails so
@@ -347,6 +347,8 @@ void exit(void)
   if (curproc == initproc)
     panic("init exiting");
 
+  cprintf("exiting... pid%d\n",curproc->pid);
+
   // Close all open files.
   for (fd = 0; fd < NOFILE; fd++)
   {
@@ -418,25 +420,37 @@ int wait(void)
       if (p->state == ZOMBIE)
       {
         // Found one.
+        cprintf("proc.c free zobie\n");
         pid = p->pid;
         if (getNumberReferences(p->kstack) == 1)
         {
           kfree(p->kstack);
+        }else{
+          decrementReferences(p->kstack);
         }
         p->kstack = 0;
         freevm(p->pgdir);
-        memset(p->swapPmd, 0, MAX_PSYC_PAGES * sizeof(struct paging_meta_data));
-        memset(p->ramPmd, 0, MAX_PSYC_PAGES * sizeof(struct paging_meta_data));
-        p->pagesInSwapfile = 0;
-        p->pagesInMemory = 0;
-        //memset(p->prioArr, 0, p->prioSize * sizeof(struct heap_p));
-        p->prioSize = 0;
-
         p->pid = 0;
         p->parent = 0;
         p->name[0] = 0;
         p->killed = 0;
         p->state = UNUSED;
+
+        initPmdArr(p,p->ramPmd);
+        initPmdArr(p,p->swapPmd);
+
+        p->prioSize = 0;
+        p->pagesInMemory = 0;
+        p->prioSize = 0;
+
+
+        // memset(p->swapPmd, 0, MAX_PSYC_PAGES * sizeof(struct paging_meta_data));
+        // memset(p->ramPmd, 0, MAX_PSYC_PAGES * sizeof(struct paging_meta_data));
+        // p->pagesInSwapfile = 0;
+        // p->pagesInMemory = 0;
+        // //memset(p->prioArr, 0, p->prioSize * sizeof(struct heap_p));
+        // p->prioSize = 0;
+
         release(&ptable.lock);
         return pid;
       }
@@ -453,6 +467,25 @@ int wait(void)
     sleep(curproc, &ptable.lock); //DOC: wait-sleep
   }
 }
+
+void initPmd(struct paging_meta_data *pmd){
+  pmd->va = (char *)-1;
+  pmd->occupied = 0;
+  pmd->offset = 0;
+  pmd->age = 0;
+}
+
+
+void initPmdArr(struct proc *p, struct paging_meta_data *pmd){
+  
+  for (int i = 0; i < MAX_PSYC_PAGES; i++)
+  {
+    initPmd(&p->ramPmd[i]);
+    initPmd(&p->swapPmd[i]);
+  }
+
+}
+
 
 int wait2(int *memoryPages, int *swapPages, int *pageFaults, int *pagedOut)
 {

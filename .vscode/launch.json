@@ -30,7 +30,7 @@
             "type": "gdb",
             "request": "attach",
             "executable": "kernel",
-            "target": "localhost:26000",
+            "target": "localhost:26001",
             "remote": true,
             "cwd": "${workspaceFolder}",
             "gdbpath": "/usr/bin/gdb"

@@ -288,7 +288,7 @@ int allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       insertPageToPrioQueue(indx);
     }
 
-    cprintf("allocuvm: a:%d, pages in memory:%d pages in swapFile:%d\n",a,p->pagesInMemory,p->pagesInSwapfile);
+    //cprintf("allocuvm: a:%d, pages in memory:%d pages in swapFile:%d\n",a,p->pagesInMemory,p->pagesInSwapfile);
 
     mem = kalloc();
     if (mem == 0)
@@ -315,7 +315,7 @@ int allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 // process size.  Returns the new process size.
 int deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 {
-  cprintf("deallocum: pgdir:%p\n",pgdir);
+  //cprintf("deallocum: pgdir:%p\n",pgdir);
   pte_t *pte;
   uint a, pa, idex;
   struct proc *p = myproc();
@@ -341,16 +341,25 @@ int deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       {
         decrementReferences(v);
       }
+
+      //ToDo: check why for some reason getPageIndex work better than getPageIndex
       idex = getPagePgdirIndex(IN_PHY, pgdir, (char *)a);
+      //idex = getPageIndex(IN_PHY, OCCUPIED, (char *)a);
       if (idex != -1)
       {
+        //cprintf("deallocum: found indx:%p\n",idex);
+
         //cprintf("1234\n");
         if (p->ramPmd[idex].occupied)
         {
           --p->pagesInMemory;
           deleteRoot(p->prioArr, idex, &p->prioSize);
+          initPmd(&p->ramPmd[idex]);
         }
-        memset(&p->ramPmd[idex], 0, sizeof(struct paging_meta_data));
+
+        //initPmd(p,p->ramPmd);
+        
+        //memset(&p->ramPmd[idex], 0, sizeof(struct paging_meta_data));
       }
       //ToDo: maybe back to this change
       // idex = getPageIndexInMemory(p,(char*)a);
@@ -372,7 +381,7 @@ int deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 void freevm(pde_t *pgdir)
 {
   uint i;
-  cprintf("freevm!\n");
+  //cprintf("freevm!\n");
   if (pgdir == 0)
     panic("freevm: no pgdir");
   deallocuvm(pgdir, KERNBASE, 0);
@@ -546,7 +555,7 @@ int copyout(pde_t *pgdir, uint va, void *p, uint len)
   return 0;
 }
 
-
+//in order to prevent panic aquire (like in fork) i split the write/read of pages to 4 chunks
 void writeToSwapFileWrapper(struct proc * p, char* buffer, uint placeOnFile, uint size){
   int start = placeOnFile;
   for (int i = 0; i < size/BUF_SIZE; i++)
@@ -562,7 +571,7 @@ void writeToSwapFileWrapper(struct proc * p, char* buffer, uint placeOnFile, uin
 void swapPages(int memIndex, int swapIndex, pde_t *pgdir, char *a)
 {
   struct proc *p = myproc();
-  cprintf("swapPages: memIndex:%d,swapIndex:%d\n",swapIndex,memIndex);
+  //cprintf("swapPages: memIndex:%d,swapIndex:%d\n",swapIndex,memIndex);
   if (memIndex == -1)
     panic("no valid memIndex");
 
@@ -727,7 +736,12 @@ void onPageFault(uint va)
   uint pa, flags;
   uint err = p->tf->err;
 
-  //cprintf("onpagefault:pid:%d va1:%p,error:%d\n",p->pid,va1,p->tf->err);
+  cprintf("onpagefault_part1:pid:%d va1:%p,error:%d\n",p->pid,va1,p->tf->err);
+
+  //  if (p->pid == 2 && (uint)va1 == PGSIZE){
+  //    cprintf("debug\n");
+  //    return;
+  //  }
 
   if (va >= KERNBASE || (pte = walkpgdir(p->pgdir, va1, 0)) == 0)
   {
@@ -736,7 +750,6 @@ void onPageFault(uint va)
     return;
   }
 
-
   //task2:
   if(err & ERR_WR){
     if (*pte & PTE_COW){
@@ -744,6 +757,7 @@ void onPageFault(uint va)
       char *v = P2V(pa);
       flags = PTE_FLAGS(*pte);
       int refs = getNumberReferences(v);
+      cprintf("cow::::::::::: pid:%d va1:%p,refs:%d\n",p->pid,va1,refs);
       if (refs > 1)
       {
         char *mem = kalloc();
@@ -786,6 +800,9 @@ void onPageFault(uint va)
   if (p->pid <= 2)
     return;
 
+  //cprintf("onpagefault_part2:pid:%d va1:%p,error:%d\n",p->pid,va1,p->tf->err);
+
+
   //cprintf("trap2: pagefault: pid %d\n",p->pid);
 
   char *ka;
@@ -803,6 +820,8 @@ void onPageFault(uint va)
   }
 
   uint ramIndx = p->pagesInMemory == MAX_PSYC_PAGES ? -1 : getPageIndex(IN_PHY, VACANT, (char *)-1);
+  //cprintf("onpagefault: insert page to mem: memIndex=%d,swapIndexd=%d,va1:%p\n",ramIndx,swapIndx,va1);
+
 
   if (p->pagesInMemory < MAX_PSYC_PAGES)
   {
@@ -813,16 +832,19 @@ void onPageFault(uint va)
   else                                              // no place in physical memory,and the required  page is in swap file
   {                                                 //we dont have place in physical memory.
     ramIndx = getPageIndex(IN_PHY, OCCUPIED, (char *)-1); //get some physical index to be cleared
+    if (ramIndx == -1){
+      panic("onPageFault: no found page in memory");
+    }
+    cprintf("onpagefault:ram is full - remove pageNum:%d from mem\n",ramIndx);
+
     struct paging_meta_data tmp;
     tmp = p->ramPmd[ramIndx];                       //use tmp for swapping
     onPageFault1(va1, pa, swapIndx, ramIndx);       // set flags to point that the page is in physical memory, and update physical data structure, mark place in swap as vacant
     swapIndx = getPageIndex(IN_SWAP, VACANT, (char *)-1); // get a vacant index in swap data structure, after we cleared it in previous line
+    cprintf("onpagefault:ram is full - insert pageNum:%d from mem to SwapIndex:%d\n",ramIndx,swapIndx);
 
     if (swapIndx == -1)
     {
-      swapIndx = getPageIndex(IN_SWAP, VACANT, (char *)-1); // get a vacant index in swap data structure
-      cprintf("onPageFault pages in swap file %d\n", p->pagesInSwapfile);
-      swapIndx = getPageIndex(IN_SWAP, VACANT, (char *)-1); // get a vacant index in swap data structure
       panic("onPageFault: no free space on swapFile");
     }
 
@@ -833,10 +855,8 @@ void onPageFault(uint va)
     //writeToSwapFile(p, (char *)PTE_ADDR(p->swapPmd[swapIndx].va), swapIndx * PGSIZE, PGSIZE); //write the data of the page we inserted to swap file
     writeToSwapFileWrapper(p, (char *)PTE_ADDR(p->swapPmd[swapIndx].va), swapIndx * PGSIZE, PGSIZE); //write the data of the page we inserted to swap file
 
-
     p->pagedout++;
     //p->pagesInSwapfile++;
-
     //set flags on page in swapfile and save pa for later
     pte = walkpgdir(p->pgdir, p->swapPmd[swapIndx].va, 0);
     uint ramPa = PTE_ADDR(*pte);
@@ -846,7 +866,6 @@ void onPageFault(uint va)
 
     //alloc ramIndex like the other case .
     //va1 = p->ramPmd[ramIndx].va; // this is the va that was originally in the swap file
-
 
     pte = walkpgdir(p->pgdir, va1, 0);
     *pte |= pa;                    //insert pa to entry
@@ -865,6 +884,7 @@ void onPageFault(uint va)
   memmove((char *)va1, buffer, PGSIZE); //copy page to physical memory
 }
 
+//in order to prevent panic aquire (like in fork) i split the write/read of pages to 4 chunks
 void readFromSwapFileWrapper(struct proc * p, char* buffer, uint placeOnFile, uint size){
   int start = placeOnFile;
   for (int i = 0; i < size/BUF_SIZE; i++)

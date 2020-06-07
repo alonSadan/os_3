@@ -3,7 +3,8 @@
 #include "user.h"
 
 void fork_cow_with_swap() {
-    int pages = 16;
+    //bug: exit garbage 
+    int pages = 24;
     // printf(1, "asking for %d pages\n",pages);
     char *buf = malloc(4096 * pages);
     for (int i = 0; i < pages; i++) {
@@ -14,6 +15,7 @@ void fork_cow_with_swap() {
             printf(1, "child data: %c\n", buf[i * 4096]);
         }
 
+        printf(1,"heeeeeeeeeeeer\n");
         for (int i = 0; i < pages; i++) {
             buf[i * 4096] = 'b';
         }
@@ -73,7 +75,14 @@ void simple_fork(){
 }
 
 void swap_no_fork() {
-    int pages = 24;
+    //dealloc version 1 (with pgdir):
+    //  bug:in the end try to run exit on pid 2 (which is bad !!) and then panic acquire
+    //  working pages Numbers:0-15,17,21,22,23,25...
+    //dealloc version 2 (without pgdir):
+    //  bug: in the end try to run exit with garbage va 
+    //  working pages number:0-15, 16+(some works some dont)
+
+    int pages = 25;
     // printf(1, "asking for %d pages\n",pages);
     char *buf = sbrk(4096 * pages);
     for (int i = 0; i < pages; i++) {
@@ -214,10 +223,10 @@ int main(int argc, char *argv[])
 {
     //test1();
     //fork_cow_no_swap();
-    //swap_no_fork(); //not working
+    swap_no_fork(); //working for some number of pages
     //nfu_test();
     //scfifo_test();
-    fork_cow_with_swap(); // not working
+    //fork_cow_with_swap(); // not working (check maybe previous versions when it works sometimes)
     //simple_fork();
     exit();
 }
