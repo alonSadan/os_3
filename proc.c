@@ -126,7 +126,7 @@ found:
   p->pagesInMemory = 0;
   p->pagesInSwapfile = 0;
 
-  if (p->pid >= 2)
+  if (p->pid > 2)
   {
     //removeSwapFile(p);
     createSwapFile(p);
@@ -197,6 +197,7 @@ int growproc(int n)
   return 0;
 }
 
+static char buffer[PGSIZE / 2];
 // Create a new process copying p as the parent.
 // Sets up stack to return as if from system call.
 // Caller must set state of returned proc to RUNNABLE.
@@ -209,8 +210,11 @@ int fork(void)
   // Allocate process.
   if ((np = allocproc()) == 0)
   {
+    cprintf("failed to allocproc....\n");
     return -1;
   }
+
+  //cprintf("fork np pid:%d\n",np->pid);
 
   // Copy process state from proc.
   if ((np->pgdir = cowuvm(curproc->pgdir, curproc->sz)) == 0)
@@ -236,31 +240,40 @@ int fork(void)
 
   pid = np->pid;
 
-  np->pagesInMemory = curproc->pagesInMemory;
-  np->pagesInSwapfile = curproc->pagesInSwapfile;
-
-  for (int i = 0; i < MAX_PSYC_PAGES; ++i)
-  {
-    np->ramPmd[i] = curproc->ramPmd[i];
-    np->ramPmd[i].pgdir = np->pgdir;
-    np->swapPmd[i] = curproc->swapPmd[i];
-    np->swapPmd[i].pgdir = np->pgdir;
-  }
-  np->prioSize = curproc->prioSize;
-  for (int i = 0; i < curproc->prioSize; i++)
-  {
-    np->prioArr[i] = curproc->prioArr[i];
-  }
   np->pagedout = 0;
   np->pagefaults = 0;
 
-  int read = 1;
-  //int offset = 0;
-  char buffer[PGSIZE / 2];
-
-  //not including 'sh' and 'init'
-  if (curproc->pid > 2)
+  for (int i = 0; i < MAX_PSYC_PAGES; i++)
   {
+    if(np->ramPmd[i].occupied) np->ramPmd[i].pgdir = np->pgdir;
+    if(np->swapPmd[i].occupied) np->swapPmd[i].pgdir = np->pgdir;
+  }
+
+  if(curproc->pid > 2){
+    np->pagesInMemory = curproc->pagesInMemory;
+    np->pagesInSwapfile = curproc->pagesInSwapfile;
+    np->prioSize = curproc->prioSize;
+
+    for (int i = 0; i < MAX_PSYC_PAGES; i++)
+    {
+      if(curproc->ramPmd[i].occupied) {
+        np->ramPmd[i].va = curproc->ramPmd[i].va;
+        np->ramPmd[i].occupied = curproc->ramPmd[i].occupied;
+        np->ramPmd[i].offset = curproc->ramPmd[i].offset;
+      }
+      if(curproc->swapPmd[i].occupied) {
+        np->swapPmd[i].va = curproc->swapPmd[i].va;
+        np->swapPmd[i].occupied = curproc->swapPmd[i].occupied;
+        np->swapPmd[i].offset = curproc->swapPmd[i].offset;
+      }
+    }
+
+    for (int i = 0; i < curproc->prioSize; i++)
+    {
+      np->prioArr[i] = curproc->prioArr[i];
+    }
+
+    int read = 1;
 
     while ((read = readFromSwapFile(curproc, buffer, offset, PGSIZE / 2)) != 0)
     {
@@ -272,6 +285,46 @@ int fork(void)
       offset += read;
     }
   }
+
+  
+  
+
+  // np->pagesInMemory = curproc->pagesInMemory;
+  // np->pagesInSwapfile = curproc->pagesInSwapfile;
+
+  // for (int i = 0; i < MAX_PSYC_PAGES; ++i)
+  // {
+  //   np->ramPmd[i] = curproc->ramPmd[i];
+  //   np->ramPmd[i].pgdir = np->pgdir;
+  //   np->swapPmd[i] = curproc->swapPmd[i];
+  //   np->swapPmd[i].pgdir = np->pgdir;
+  // }
+  // np->prioSize = curproc->prioSize;
+  // for (int i = 0; i < curproc->prioSize; i++)
+  // {
+  //   np->prioArr[i] = curproc->prioArr[i];
+  // }
+  // np->pagedout = 0;
+  // np->pagefaults = 0;
+
+  // int read = 1;
+  // //int offset = 0;
+  
+
+  // //not including 'sh' and 'init'
+  // if (curproc->pid > 2)
+  // {
+
+  //   while ((read = readFromSwapFile(curproc, buffer, offset, PGSIZE / 2)) != 0)
+  //   {
+  //     if (read == -1)
+  //       panic("fork: swap file not readable");
+  //     if (writeToSwapFile(np, buffer, offset, read) == -1)
+  //       panic("fork: failed to write buffer to child");
+
+  //     offset += read;
+  //   }
+  // }
 
   acquire(&ptable.lock);
 
@@ -304,7 +357,6 @@ void exit(void)
     }
   }
 
-  
   #if TRUE
     procdump();
   #endif
@@ -377,7 +429,7 @@ int wait(void)
         memset(p->ramPmd, 0, MAX_PSYC_PAGES * sizeof(struct paging_meta_data));
         p->pagesInSwapfile = 0;
         p->pagesInMemory = 0;
-        memset(p->prioArr, 0, p->prioSize * sizeof(struct heap_p));
+        //memset(p->prioArr, 0, p->prioSize * sizeof(struct heap_p));
         p->prioSize = 0;
 
         p->pid = 0;

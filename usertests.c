@@ -1760,7 +1760,7 @@ main(int argc, char *argv[])
   // createdelete();
   // linkunlink();
   // concreate();
-  fourfiles();
+  // fourfiles();
   // sharedfd();
 
   // bigargtest();
@@ -1779,7 +1779,7 @@ main(int argc, char *argv[])
   // exitiputtest();
   // iputtest();
 
-  // mem();
+  ////mem();
   // pipe1();
   // preempt();
   // exitwait();
@@ -1797,7 +1797,7 @@ main(int argc, char *argv[])
 
   // uio();
 
-  // exectest();
+  exectest();
 
   exit();
 }

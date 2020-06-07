@@ -136,6 +136,7 @@ int exec(char *path, char **argv)
       curproc->swapPmd[i].pgdir = pgdir;
   }
 
+
   // Commit to the user image.
   oldpgdir = curproc->pgdir;
   curproc->pgdir = pgdir;
@@ -151,6 +152,9 @@ int exec(char *path, char **argv)
 
   switchuvm(curproc);
   freevm(oldpgdir);
+
+  
+
   return 0;
 
 bad:
