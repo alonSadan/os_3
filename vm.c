@@ -56,7 +56,7 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
   pte_t *pgtab;
 
   pde = &pgdir[PDX(va)];
-  if (*pde & PTE_P) //if page table entry is present
+  if (*pde & PTE_P) //if page directory entry is present
   {
     pgtab = (pte_t *)P2V(PTE_ADDR(*pde));
   }
@@ -266,7 +266,7 @@ int allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
   uint indx;
   struct proc *p = myproc();
   //pte_t *pte;
-  if (newsz >= KERNBASE)
+  if (newsz >= KERNBASE)  //se that virtual address is not s kernel space
     return 0;
   if (newsz < oldsz)
     return oldsz;
@@ -583,7 +583,6 @@ void swapPages(int memIndex, int swapIndex, pde_t *pgdir, char *a)
 
   if (swapIndex == -1){
     cprintf("swapPages: pid of panic process is %d\n", p->pid);
-    cprintf("bbbb\n");
     panic("no space left in swapFile");
   }
 
@@ -593,7 +592,6 @@ void swapPages(int memIndex, int swapIndex, pde_t *pgdir, char *a)
   p->swapPmd[swapIndex].occupied = 1;
   p->swapPmd[swapIndex].va = p->ramPmd[memIndex].va;
   p->pagesInSwapfile++;
-
   // if (writeToSwapFile(p, (char *)PTE_ADDR(p->ramPmd[memIndex].va), swapIndex * PGSIZE, PGSIZE) == -1)
   // {
   //   panic("swapPages: failed to write to swap file");
@@ -606,7 +604,7 @@ void swapPages(int memIndex, int swapIndex, pde_t *pgdir, char *a)
   //get pyshical adr and clean old page in memory:
   char *va = p->ramPmd[memIndex].va;
   pte_t *pte = walkpgdir(pgdir, va, 0);
-  uint pa = PTE_ADDR(*pte);
+  uint pa = PTE_ADDR(*pte); //get address of page, no offset
   if (decrementReferencesAndGetPrevVal(P2V(pa)) == 1){
     kfree(P2V(pa));
   }
@@ -746,12 +744,12 @@ void onPageFault(uint va)
   uint pa, flags;
   uint err = p->tf->err;
 
-  cprintf("onpagefault_part1:pid:%d va1:%p,error:%d\n",p->pid,va1,p->tf->err);
+  //cprintf("onpagefault_part1:pid:%d va1:%p,error:%d\n",p->pid,va1,p->tf->err);
 
 
   if (va >= KERNBASE || (pte = walkpgdir(p->pgdir, va1, 0)) == 0)
   {
-    cprintf("pid %d %s: Page fault: access to invalid address.va1:%p,pgNum:%d,err:%d\n", p->pid, p->name,va1,((uint)va1/PGSIZE),err);
+    //cprintf("pid %d %s: Page fault: access to invalid address.va1:%p,pgNum:%d,err:%d\n", p->pid, p->name,va1,((uint)va1/PGSIZE),err);
     goto cleanup;
   }
 
@@ -763,11 +761,11 @@ void onPageFault(uint va)
       flags = PTE_FLAGS(*pte);
       //notice: only dec if refs > 1
       int refs = decrementReferencesAndGetPrevVal(v);//getNumberReferences(v);
-      cprintf("cow::::::::::: pid:%d va1:%p,refs:%d\n",p->pid,va1,refs);
+      // cprintf("cow::::::::::: pid:%d va1:%p,refs:%d\n",p->pid,va1,refs);
       if (refs > 1)
       {        
         if ((mem = kalloc()) == 0){
-          cprintf("onpagefault: cow: mem failed\n");
+          // cprintf("onpagefault: cow: mem failed\n");
           goto cleanup;
         }
         //cprintf("cow:pid%d alloc with mem:%p to va1:%d,pgdir:%d\n",p->pid,mem,va1,p->pgdir);
@@ -783,14 +781,14 @@ void onPageFault(uint va)
       lcr3(V2P(p->pgdir));
     }else{
       if (!(*pte & PTE_PG) && !(*pte & PTE_P)){
-        cprintf("33333333333: pid:%d, va1:%p num:%d\n",p->pid,va1,p->tf->err);
+      //  cprintf("33333333333: pid:%d, va1:%p num:%d\n",p->pid,va1,p->tf->err);
         goto cleanup;
       }
     }
   }else{
     //not a write fault
     if (!(*pte & PTE_PG) && !(*pte & PTE_P)){
-      cprintf("444444444444444: pid:%d, va1:%p num:%d\n",p->pid,va1,p->tf->err);
+   //   cprintf("444444444444444: pid:%d, va1:%p num:%d\n",p->pid,va1,p->tf->err);
       goto cleanup;
     }
   }
@@ -837,7 +835,7 @@ void onPageFault(uint va)
     tmp = p->ramPmd[ramIndx];                       //use tmp for swapping
     onPageFault1(va1, pa, swapIndx, ramIndx);       // set flags to point that the page is in physical memory, and update physical data structure, mark place in swap as vacant
     swapIndx = getPageIndex(IN_SWAP, VACANT, (char *)-1); // get a vacant index in swap data structure, after we cleared it in previous line
-    cprintf("onpagefault:ram is full - insert pageNum:%d with va:%p from mem to SwapIndex:%d\n",ramIndx,tmp.va,swapIndx);
+   // cprintf("onpagefault:ram is full - insert pageNum:%d with va:%p from mem to SwapIndex:%d\n",ramIndx,tmp.va,swapIndx);
 
     // if ((uint)tmp.va == PGSIZE){
     //   cprintf("1oh no. if u get here we will see panic in the end!!!!!!!!!!!!!!!!!!!!!!!!!\n");
