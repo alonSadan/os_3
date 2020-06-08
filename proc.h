@@ -95,6 +95,9 @@ struct proc
 
   struct heap_p prioArr[MAX_PSYC_PAGES*2+1];
   int prioSize;
+
+  //volatile int pagefaultLock;
+  //volatile int pageReplacementLock;
 };
 
 

@@ -78,7 +78,11 @@ void trap(struct trapframe *tf)
     lapiceoi();
     break;
   case T_PGFLT:
+    updatePagesInPriorityQueue();
+    myproc()->tf = tf;
     onPageFault(rcr2());
+    if (myproc()->killed)
+      exit();
     break;
 
   //PAGEBREAK: 13
@@ -108,7 +112,8 @@ void trap(struct trapframe *tf)
   // If interrupts were on while locks held, would need to check nlock.
   if (myproc() && myproc()->state == RUNNING &&
       tf->trapno == T_IRQ0 + IRQ_TIMER){
-    updatePagesInPriorityQueue();
+    //not here yet to avoid sync issues
+    //updatePagesInPriorityQueue();
     yield();
   }
 

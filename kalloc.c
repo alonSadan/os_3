@@ -79,6 +79,9 @@ void kfree(char *v)
   if (r->ref != 1){
     //cprintf("a: %d",r->ref);
     cprintf("kfree: wrong ref r %d\n",r->ref);
+    cprintf("aaa\n");
+    cprintf("aaa\n");
+    cprintf("aaa\n");
     panic("kfree: ref");    
   }
   r->next = kmem.freelist;
@@ -152,6 +155,23 @@ void incrementReferences(char *v)
   if (kmem.use_lock)
     release(&kmem.lock);
 }
+
+int decrementReferencesAndGetPrevVal(char *v){
+int ans;
+struct run *r;
+  if (kmem.use_lock)
+    acquire(&kmem.lock);  
+  r = &kmem.runArr[V2P(v)/PGSIZE];
+  ans = r->ref;
+  if (r->ref > 1)
+    r->ref--;
+
+  if (kmem.use_lock)
+    release(&kmem.lock);
+  
+  return ans;
+}
+
 
 void decrementReferences(char *v){
 struct run *r;

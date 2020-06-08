@@ -10,6 +10,7 @@ struct sleeplock;
 struct stat;
 struct superblock;
 struct freePageInSwap;
+struct paging_meta_data;
 
 // bio.c
 void binit(void);
@@ -81,6 +82,7 @@ void incrementReferences(char *);
 void decrementReferences(char *);
 uint getNumberReferences(char *);
 void _kfree(char *v);
+int decrementReferencesAndGetPrevVal(char *v);
 
 // kbd.c
 void kbdintr(void);
@@ -134,6 +136,9 @@ int wait(void);
 void wakeup(void *);
 void yield(void);
 int wait2(int* memoryPages,int* swapPages,int* pageFaults, int* pagedOut);
+
+void initPmd(struct paging_meta_data *pmd);
+void initPmdArr(struct proc *p, struct paging_meta_data *pmd);
 //void getStats(int* memoryPages,int* swapPages,int* pageFaults, int* pagedOut);
 
 

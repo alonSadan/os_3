@@ -560,6 +560,7 @@ fourfiles(void)
     fd = open(fname, 0);
     total = 0;
     while((n = read(fd, buf, sizeof(buf))) > 0){
+      printf(1,"read: n:%d\n",n);
       for(j = 0; j < n; j++){
         if(buf[j] != '0'+i){
           printf(1, "wrong char\n");
@@ -1756,46 +1757,46 @@ main(int argc, char *argv[])
   }
   close(open("usertests.ran", O_CREATE));
 
-  argptest();
-  createdelete();
-  linkunlink();
-  concreate();
-  fourfiles();
-  sharedfd();
+  // argptest();
+  // createdelete();
+  // linkunlink();
+  // concreate();
+  //fourfiles();
+  // sharedfd();
 
-  bigargtest();
-  bigwrite();
-  bigargtest();
-  bsstest();
-  // sbrktest();
-  validatetest();
+  // bigargtest();
+  // bigwrite();
+  // bigargtest();
+  // bsstest();
+  // // sbrktest();
+  // validatetest();
 
-  opentest();
-  writetest();
-  writetest1();
-  createtest();
+  // opentest();
+  // writetest();
+  // writetest1();
+  // createtest();
 
-  openiputtest();
-  exitiputtest();
-  iputtest();
+  // openiputtest();
+  // exitiputtest();
+  // iputtest();
 
-  mem();
-  pipe1();
-  preempt();
-  exitwait();
+  // //mem();
+  // pipe1();
+  // preempt();
+  // exitwait();
 
-  rmdot();
-  fourteen();
-  bigfile();
-  subdir();
-  linktest();
-  unlinkread();
-  dirfile();
-  iref();
-  forktest();
-  bigdir(); // slow
+  // rmdot();
+  // fourteen();
+  // bigfile();
+  // subdir();
+  // linktest();
+  // unlinkread();
+  // dirfile();
+  // iref();
+  // forktest();
+  // bigdir(); // slow
 
-  uio();
+  // uio();
 
   exectest();
 
