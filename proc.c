@@ -420,14 +420,17 @@ int wait(void)
       if (p->state == ZOMBIE)
       {
         // Found one.
-        cprintf("proc.c free zobie\n");
+        //cprintf("proc.c free zobie\n");
         pid = p->pid;
-        if (getNumberReferences(p->kstack) == 1)
-        {
+         if (decrementReferencesAndGetPrevVal(p->kstack) == 1){
           kfree(p->kstack);
-        }else{
-          decrementReferences(p->kstack);
         }
+        // if (getNumberReferences(p->kstack) == 1)
+        // {
+        //   kfree(p->kstack);
+        // }else{
+        //   decrementReferences(p->kstack);
+        // }
         p->kstack = 0;
         freevm(p->pgdir);
         p->pid = 0;

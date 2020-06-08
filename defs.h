@@ -82,6 +82,7 @@ void incrementReferences(char *);
 void decrementReferences(char *);
 uint getNumberReferences(char *);
 void _kfree(char *v);
+int decrementReferencesAndGetPrevVal(char *v);
 
 // kbd.c
 void kbdintr(void);

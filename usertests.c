@@ -560,6 +560,7 @@ fourfiles(void)
     fd = open(fname, 0);
     total = 0;
     while((n = read(fd, buf, sizeof(buf))) > 0){
+      printf(1,"read: n:%d\n",n);
       for(j = 0; j < n; j++){
         if(buf[j] != '0'+i){
           printf(1, "wrong char\n");
@@ -1760,7 +1761,7 @@ main(int argc, char *argv[])
   // createdelete();
   // linkunlink();
   // concreate();
-  // fourfiles();
+  //fourfiles();
   // sharedfd();
 
   // bigargtest();
@@ -1779,7 +1780,7 @@ main(int argc, char *argv[])
   // exitiputtest();
   // iputtest();
 
-  ////mem();
+  // //mem();
   // pipe1();
   // preempt();
   // exitwait();
