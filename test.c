@@ -4,7 +4,8 @@
 
 void fork_cow_with_swap() {
     //bug: exit garbage 
-    int pages = 24;
+    //17,18,19
+    int pages = 18;
     // printf(1, "asking for %d pages\n",pages);
     char *buf = malloc(4096 * pages);
     for (int i = 0; i < pages; i++) {
@@ -75,14 +76,10 @@ void simple_fork(){
 }
 
 void swap_no_fork() {
-    //dealloc version 1 (with pgdir):
-    //  bug:in the end try to run exit on pid 2 (which is bad !!) and then panic acquire
-    //  working pages Numbers:0-15,17,21,22,23,25...
-    //dealloc version 2 (without pgdir):
-    //  bug: in the end try to run exit with garbage va 
-    //  working pages number:0-15, 16+(some works some dont)
-
-    int pages = 25;
+    
+    printf(1,"swap_no_fork starting.........\n");
+   
+    int pages = 24;
     // printf(1, "asking for %d pages\n",pages);
     char *buf = sbrk(4096 * pages);
     for (int i = 0; i < pages; i++) {
@@ -97,6 +94,8 @@ void swap_no_fork() {
     // sleep(10);
     //free(buf);
     sbrk(-4096 * pages);
+    //char input[10];
+    //gets(input, 10);
 }
 
 void nfu_test() {
@@ -221,12 +220,11 @@ void test1()
 
 int main(int argc, char *argv[])
 {
-    //test1();
     //fork_cow_no_swap();
-    swap_no_fork(); //working for some number of pages
+    //swap_no_fork(); //working with the plaster
     //nfu_test();
     //scfifo_test();
-    //fork_cow_with_swap(); // not working (check maybe previous versions when it works sometimes)
+    fork_cow_with_swap(); // "working" for some number of pages 
     //simple_fork();
     exit();
 }

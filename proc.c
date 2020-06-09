@@ -15,6 +15,8 @@ struct
 
 static struct proc *initproc;
 
+int DEBUGPROC = 0;
+
 int nextpid = 1;
 extern void forkret(void);
 extern void trapret(void);
@@ -215,8 +217,9 @@ int fork(void)
   }
 
   //cprintf("fork np pid:%d\n",np->pid);
-    
+
   // Copy process state from proc.
+
   if ((np->pgdir = cowuvm(curproc->pgdir, curproc->sz)) == 0)
   { //if cowuvm fails so
     kfree(np->kstack);
@@ -224,6 +227,18 @@ int fork(void)
     np->state = UNUSED;
     return -1;
   }
+  
+  // np->pgdir =curproc->pid <= 2 ? copyuvm(curproc->pgdir, curproc->sz) : cowuvm(curproc->pgdir, curproc->sz);
+
+  // // Copy process state from proc.
+  // if (np->pgdir == 0)
+  // { //if cowuvm fails so
+  //   kfree(np->kstack);
+  //   np->kstack = 0;
+  //   np->state = UNUSED;
+  //   return -1;
+  // }
+
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
@@ -249,6 +264,7 @@ int fork(void)
     if(np->swapPmd[i].occupied) np->swapPmd[i].pgdir = np->pgdir;
   }
 
+  //copy without pgdir
   if(curproc->pid > 2){
     np->pagesInMemory = curproc->pagesInMemory;
     np->pagesInSwapfile = curproc->pagesInSwapfile;
@@ -287,45 +303,6 @@ int fork(void)
   }
 
   
-  
-
-  // np->pagesInMemory = curproc->pagesInMemory;
-  // np->pagesInSwapfile = curproc->pagesInSwapfile;
-
-  // for (int i = 0; i < MAX_PSYC_PAGES; ++i)
-  // {
-  //   np->ramPmd[i] = curproc->ramPmd[i];
-  //   np->ramPmd[i].pgdir = np->pgdir;
-  //   np->swapPmd[i] = curproc->swapPmd[i];
-  //   np->swapPmd[i].pgdir = np->pgdir;
-  // }
-  // np->prioSize = curproc->prioSize;
-  // for (int i = 0; i < curproc->prioSize; i++)
-  // {
-  //   np->prioArr[i] = curproc->prioArr[i];
-  // }
-  // np->pagedout = 0;
-  // np->pagefaults = 0;
-
-  // int read = 1;
-  // //int offset = 0;
-  
-
-  // //not including 'sh' and 'init'
-  // if (curproc->pid > 2)
-  // {
-
-  //   while ((read = readFromSwapFile(curproc, buffer, offset, PGSIZE / 2)) != 0)
-  //   {
-  //     if (read == -1)
-  //       panic("fork: swap file not readable");
-  //     if (writeToSwapFile(np, buffer, offset, read) == -1)
-  //       panic("fork: failed to write buffer to child");
-
-  //     offset += read;
-  //   }
-  // }
-
   acquire(&ptable.lock);
 
   np->state = RUNNABLE;
@@ -347,7 +324,7 @@ void exit(void)
   if (curproc == initproc)
     panic("init exiting");
 
-  cprintf("exiting... pid%d\n",curproc->pid);
+  if (DEBUGPROC) cprintf("exiting... pid%d\n",curproc->pid);
 
   // Close all open files.
   for (fd = 0; fd < NOFILE; fd++)
@@ -420,17 +397,12 @@ int wait(void)
       if (p->state == ZOMBIE)
       {
         // Found one.
-        //cprintf("proc.c free zobie\n");
+        if (DEBUGPROC) cprintf("proc.c free zobie\n");
         pid = p->pid;
          if (decrementReferencesAndGetPrevVal(p->kstack) == 1){
           kfree(p->kstack);
         }
-        // if (getNumberReferences(p->kstack) == 1)
-        // {
-        //   kfree(p->kstack);
-        // }else{
-        //   decrementReferences(p->kstack);
-        // }
+       
         p->kstack = 0;
         freevm(p->pgdir);
         p->pid = 0;
@@ -720,59 +692,3 @@ void procdump(void)
     cprintf("\n");
   }
 }
-
-// struct freePageInSwap *getNextFreePageAddressInSwap(struct proc *p)
-// {
-//   struct freePageInSwap *toreturn = p->head;
-//   if (p->head != null)
-//   {
-//     p->head = p->head->next;
-//   }
-//   return toreturn;
-// }
-
-// uint getNextFreePageIndexInSwap(struct proc *p)
-// {
-//   int i;
-//   for (i = 0; i < MAX_PSYC_PAGES; i++)
-//   {
-//     if (!p->swapPmd[i].occupied)
-//       return i;
-//   }
-//   return -1;
-// }
-
-// uint getPageIndexInSwap(struct proc *p, char *a)
-// {
-//   int i;
-//   for (i = 0; i < MAX_PSYC_PAGES; i++)
-//   {
-//     if (p->swapPmd[i].va == a)
-//       return i;
-//   }
-//   return -1;
-// }
-
-// uint getPageIndexInMemory(struct proc *p, char *a)
-// {
-//   int i;
-//   for (i = 0; i < MAX_PSYC_PAGES; i++)
-//   {
-//     if (p->ramPmd[i].va == a)
-//       return i;
-//   }
-//   return -1;
-// }
-// uint getNextFreePageIndexInMemory(struct proc *p)
-// {
-//   if(p->pagesInMemory >= MAX_PSYC_PAGES)
-//     return -1;
-
-//   int i;
-//   for (i = 0; i < MAX_PSYC_PAGES; i++)
-//   {
-//     if (!p->ramPmd[i].occupied)
-//       return i;
-//   }
-//   return -1;
-// }
