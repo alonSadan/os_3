@@ -15,7 +15,7 @@ struct
 
 static struct proc *initproc;
 
-int DEBUGPROC = 0;
+//int DEBUGPROC = 1;
 
 int nextpid = 1;
 extern void forkret(void);
@@ -117,27 +117,21 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
-  for (int i = 0; i < MAX_PSYC_PAGES; i++)
-  {
-    p->swapPmd[i].va = (char *)-1;
-    p->ramPmd[i].va = (char *)-1;
-    p->swapPmd[i].occupied = 0;
-    p->ramPmd[i].occupied = 0;
-  }
+  initPmdArr(p,p->ramPmd);
+  initPmdArr(p,p->swapPmd);
 
   p->pagesInMemory = 0;
   p->pagesInSwapfile = 0;
 
-  if (p->pid > 2)
-  {
-    //removeSwapFile(p);
+  if (p->pid > 2){
     createSwapFile(p);
   }
 
-  // p->head = null;
-
   return p;
 }
+
+static char buffer[PGSIZE];
+
 
 //PAGEBREAK: 32
 // Set up first user process.
@@ -199,14 +193,12 @@ int growproc(int n)
   return 0;
 }
 
-static char buffer[PGSIZE / 2];
 // Create a new process copying p as the parent.
 // Sets up stack to return as if from system call.
 // Caller must set state of returned proc to RUNNABLE.
 int fork(void)
 {
   int i, pid;
-  int offset = 0;
   struct proc *np;
   struct proc *curproc = myproc();
   // Allocate process.
@@ -216,10 +208,7 @@ int fork(void)
     return -1;
   }
 
-  //cprintf("fork np pid:%d\n",np->pid);
-
   // Copy process state from proc.
-
   if ((np->pgdir = cowuvm(curproc->pgdir, curproc->sz)) == 0)
   { //if cowuvm fails so
     kfree(np->kstack);
@@ -227,18 +216,24 @@ int fork(void)
     np->state = UNUSED;
     return -1;
   }
+
+  np->pagedout = 0;
+  np->pagefaults = 0;
+
+  np->pagesInMemory = curproc->pagesInMemory;
+  np->pagesInSwapfile = curproc->pagesInSwapfile;
+  np->prioSize = curproc->prioSize;
+
+  for (int i = 0; i < MAX_PSYC_PAGES; i++)
+  {
+    if(np->ramPmd[i].occupied) 
+      np->ramPmd[i]= curproc->ramPmd[i];
+    if(np->swapPmd[i].occupied && curproc->pid > 2){
+      readFromSwapFile(curproc,buffer,curproc->swapPmd[i].offset,PGSIZE);
+      writeToSwapFile(np,buffer,curproc->swapPmd[i].offset,PGSIZE);
+    }
+  }
   
-  // np->pgdir =curproc->pid <= 2 ? copyuvm(curproc->pgdir, curproc->sz) : cowuvm(curproc->pgdir, curproc->sz);
-
-  // // Copy process state from proc.
-  // if (np->pgdir == 0)
-  // { //if cowuvm fails so
-  //   kfree(np->kstack);
-  //   np->kstack = 0;
-  //   np->state = UNUSED;
-  //   return -1;
-  // }
-
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
@@ -254,53 +249,6 @@ int fork(void)
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
 
   pid = np->pid;
-
-  np->pagedout = 0;
-  np->pagefaults = 0;
-
-  for (int i = 0; i < MAX_PSYC_PAGES; i++)
-  {
-    if(np->ramPmd[i].occupied) np->ramPmd[i].pgdir = np->pgdir;
-    if(np->swapPmd[i].occupied) np->swapPmd[i].pgdir = np->pgdir;
-  }
-
-  //copy without pgdir
-  if(curproc->pid > 2){
-    np->pagesInMemory = curproc->pagesInMemory;
-    np->pagesInSwapfile = curproc->pagesInSwapfile;
-    np->prioSize = curproc->prioSize;
-
-    for (int i = 0; i < MAX_PSYC_PAGES; i++)
-    {
-      if(curproc->ramPmd[i].occupied) {
-        np->ramPmd[i].va = curproc->ramPmd[i].va;
-        np->ramPmd[i].occupied = curproc->ramPmd[i].occupied;
-        np->ramPmd[i].offset = curproc->ramPmd[i].offset;
-      }
-      if(curproc->swapPmd[i].occupied) {
-        np->swapPmd[i].va = curproc->swapPmd[i].va;
-        np->swapPmd[i].occupied = curproc->swapPmd[i].occupied;
-        np->swapPmd[i].offset = curproc->swapPmd[i].offset;
-      }
-    }
-
-    for (int i = 0; i < curproc->prioSize; i++)
-    {
-      np->prioArr[i] = curproc->prioArr[i];
-    }
-
-    int read = 1;
-
-    while ((read = readFromSwapFile(curproc, buffer, offset, PGSIZE / 2)) != 0)
-    {
-      if (read == -1)
-        panic("fork: swap file not readable");
-      if (writeToSwapFile(np, buffer, offset, read) == -1)
-        panic("fork: failed to write buffer to child");
-
-      offset += read;
-    }
-  }
 
   
   acquire(&ptable.lock);
@@ -324,7 +272,9 @@ void exit(void)
   if (curproc == initproc)
     panic("init exiting");
 
-  if (DEBUGPROC) cprintf("exiting... pid%d\n",curproc->pid);
+  #if DEBUG
+    cprintf("exiting... pid%d\n",curproc->pid);
+  #endif
 
   // Close all open files.
   for (fd = 0; fd < NOFILE; fd++)
@@ -340,20 +290,18 @@ void exit(void)
     procdump();
   #endif
 
+  if (curproc->pid > 2)
+  {
+    if (removeSwapFile(curproc) == -1)
+      panic("exit: failed to removeSwapFile");    
+  }
+
   begin_op();
   iput(curproc->cwd);
   end_op();
   curproc->cwd = 0;
 
-  if (curproc->pid > 2)
-  {
-    if (removeSwapFile(curproc) == -1)
-    {
-      panic("exit: failed to removeSwapFile");
-    }
-  }
-  
-  
+
   acquire(&ptable.lock);
 
   // Parent might be sleeping in wait().
@@ -397,7 +345,10 @@ int wait(void)
       if (p->state == ZOMBIE)
       {
         // Found one.
-        if (DEBUGPROC) cprintf("proc.c free zobie\n");
+        #if DEBUG
+          cprintf("proc.c free zobie\n");
+        #endif
+
         pid = p->pid;
          if (decrementReferencesAndGetPrevVal(p->kstack) == 1){
           kfree(p->kstack);
@@ -417,15 +368,7 @@ int wait(void)
         p->prioSize = 0;
         p->pagesInMemory = 0;
         p->prioSize = 0;
-
-
-        // memset(p->swapPmd, 0, MAX_PSYC_PAGES * sizeof(struct paging_meta_data));
-        // memset(p->ramPmd, 0, MAX_PSYC_PAGES * sizeof(struct paging_meta_data));
-        // p->pagesInSwapfile = 0;
-        // p->pagesInMemory = 0;
-        // //memset(p->prioArr, 0, p->prioSize * sizeof(struct heap_p));
-        // p->prioSize = 0;
-
+       
         release(&ptable.lock);
         return pid;
       }
@@ -690,5 +633,13 @@ void procdump(void)
     }
     cprintf(" %d / %d free page frames in the system", getNumberOfFreePages(), MAXPAGES);
     cprintf("\n");
+  }
+}
+
+void increaseProcAge(){
+  struct proc* p = myproc();
+  for(int i=0; i<MAX_PSYC_PAGES;i++){
+    if((p->ramPmd[i].occupied))
+      p->ramPmd[i].age++;     
   }
 }

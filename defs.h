@@ -12,6 +12,7 @@ struct superblock;
 struct freePageInSwap;
 struct paging_meta_data;
 
+
 // bio.c
 void binit(void);
 struct buf *bread(uint, uint);
@@ -139,6 +140,7 @@ int wait2(int* memoryPages,int* swapPages,int* pageFaults, int* pagedOut);
 
 void initPmd(struct paging_meta_data *pmd);
 void initPmdArr(struct proc *p, struct paging_meta_data *pmd);
+void increaseProcAge();
 //void getStats(int* memoryPages,int* swapPages,int* pageFaults, int* pagedOut);
 
 
@@ -216,7 +218,7 @@ void switchkvm(void);
 int copyout(pde_t *, uint, void *, uint);
 void clearpteu(pde_t *pgdir, char *uva);
 
-void swapPages(int memIndex,int swapIndex,pde_t *pgdir ,char *a);
+void pageToSwapFile(int memIndex,int swapIndex,pde_t *pgdir);
 uint getPageIndex(int inSwapFile,int isOccupied, char *va);
 uint getPagePgdirIndex(int inSwapFile,pde_t *pgdir,char *va);
 

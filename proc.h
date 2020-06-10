@@ -1,6 +1,7 @@
 
 #define MAX_PSYC_PAGES 16
 #define MAX_TOTAL_PAGES 32
+#define MAX_PRIO_ARR (2*MAX_PSYC_PAGES + 1)
 
 #include "priorityQueue.h"
 

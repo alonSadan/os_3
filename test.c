@@ -221,7 +221,7 @@ void test1()
 int main(int argc, char *argv[])
 {
     //fork_cow_no_swap();
-    //swap_no_fork(); //working with the plaster
+    swap_no_fork(); //working with the plaster
     //nfu_test();
     //scfifo_test();
     fork_cow_with_swap(); // "working" for some number of pages 
