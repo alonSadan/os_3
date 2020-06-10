@@ -139,7 +139,7 @@ void yield(void);
 int wait2(int* memoryPages,int* swapPages,int* pageFaults, int* pagedOut);
 
 void initPmd(struct paging_meta_data *pmd);
-void initPmdArr(struct proc *p, struct paging_meta_data *pmd);
+void initPmdArr(struct paging_meta_data *pmd,uint size);
 void increaseProcAge();
 //void getStats(int* memoryPages,int* swapPages,int* pageFaults, int* pagedOut);
 
@@ -225,6 +225,9 @@ uint getPagePgdirIndex(int inSwapFile,pde_t *pgdir,char *va);
 void onPageFault(uint va);
 uint getNumberOfFreePages();
 void updatePagesInPriorityQueue();
+
+uint shiftCounter(int bit, int pageNum);
+uint countSetBits(uint n);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x) / sizeof((x)[0]))

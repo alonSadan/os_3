@@ -117,8 +117,8 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
-  initPmdArr(p,p->ramPmd);
-  initPmdArr(p,p->swapPmd);
+  initPmdArr(p->ramPmd,MAX_PSYC_PAGES);
+  initPmdArr(p->swapPmd,MAX_TOTAL_PAGES - MAX_PSYC_PAGES);
 
   p->pagesInMemory = 0;
   p->pagesInSwapfile = 0;
@@ -204,7 +204,6 @@ int fork(void)
   // Allocate process.
   if ((np = allocproc()) == 0)
   {
-    cprintf("failed to allocproc....\n");
     return -1;
   }
 
@@ -362,8 +361,8 @@ int wait(void)
         p->killed = 0;
         p->state = UNUSED;
 
-        initPmdArr(p,p->ramPmd);
-        initPmdArr(p,p->swapPmd);
+        initPmdArr(p->ramPmd,MAX_PSYC_PAGES);
+        initPmdArr(p->swapPmd,MAX_TOTAL_PAGES - MAX_PSYC_PAGES);
 
         p->prioSize = 0;
         p->pagesInMemory = 0;
@@ -394,12 +393,11 @@ void initPmd(struct paging_meta_data *pmd){
 }
 
 
-void initPmdArr(struct proc *p, struct paging_meta_data *pmd){
-  
-  for (int i = 0; i < MAX_PSYC_PAGES; i++)
+void initPmdArr(struct paging_meta_data *pmd,uint size){  
+  struct paging_meta_data * p = pmd;
+  for (; p < &pmd[size]; p++)
   {
-    initPmd(&p->ramPmd[i]);
-    initPmd(&p->swapPmd[i]);
+    initPmd(p);
   }
 
 }

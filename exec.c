@@ -43,8 +43,8 @@ int exec(char *path, char **argv)
   bkPrioSize = curproc->prioSize;
 
   //reset
-  initPmdArr(curproc,curproc->ramPmd);
-  initPmdArr(curproc,curproc->swapPmd);
+  initPmdArr(curproc->ramPmd,MAX_PSYC_PAGES);
+  initPmdArr(curproc->swapPmd,MAX_TOTAL_PAGES-MAX_PSYC_PAGES);
   curproc->prioSize = 0; 
   curproc->pagesInMemory = 0;
   curproc->pagesInSwapfile = 0;

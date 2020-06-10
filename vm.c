@@ -253,13 +253,17 @@ void insertPageToPrioQueue(int pageNum)
   if (findInHeap(p->prioArr, pageNum, &p->prioSize).index != -1)
     deleteRoot(p->prioArr, pageNum, &p->prioSize); //return;
 
+#if DEBUG
+  cprintf("insert pageNum:%d to prioQueue\n",pageNum);
+#endif
+
 #if NFUA
   p->ramPmd[pageNum].age = 0;
   insertHeap(p->prioArr, (struct heap_p){pageNum, p->ramPmd[pageNum].age}, &p->prioSize);
 #endif
 #if LAPA
   p->ramPmd[pageNum].age = 0xFFFFFFFF;
-  insertHeap(p->prioArr, (struct heap_p){pageNum, p->ramPmd[pageNum].age}, &p->prioSize);
+  insertHeap(p->prioArr, (struct heap_p){pageNum, countSetBits(p->ramPmd[pageNum].age)}, &p->prioSize);
 #endif
 #if SCFIFO | AQ
   insertHeap(p->prioArr, (struct heap_p){pageNum, p->prioArr[p->prioSize].priority + 1}, &p->prioSize);
@@ -295,7 +299,8 @@ int allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
         if (p->pagesInSwapfile == MAX_TOTAL_PAGES - MAX_PSYC_PAGES)
           panic("allocuvm: No free sapce either in ram and disc");
 
-        pageToSwapFile(peekHeap(p->prioArr).index, getPageIndex(IN_SWAP, VACANT, CLEAN_VA), pgdir);
+        
+        pageToSwapFile(getPageIndex(IN_PHY,OCCUPIED,CLEAN_VA), getPageIndex(IN_SWAP, VACANT, CLEAN_VA), pgdir);
       }
     }
 
@@ -544,17 +549,6 @@ int copyout(pde_t *pgdir, uint va, void *p, uint len)
   return 0;
 }
 
-//in order to prevent panic aquire (like in fork) i split the write/read of pages to 4 chunks
-void writeToSwapFileWrapper(struct proc * p, char* buffer, uint placeOnFile, uint size){
-  int start = placeOnFile;
-  for (int i = 0; i < size/BUF_SIZE; i++)
-  {
-    if(writeToSwapFile(p,buffer+(BUF_SIZE*i),start+(i*BUF_SIZE),BUF_SIZE) == -1)
-      panic("writeToSwapFileWrapper failed");
-  }
-  
-}
-
 
 //
 void pageToSwapFile(int memIndex, int swapIndex, pde_t *pgdir)
@@ -563,7 +557,7 @@ void pageToSwapFile(int memIndex, int swapIndex, pde_t *pgdir)
   p->pagedout++;
 
   #if DEBUG
-    cprintf("swapPages: memIndex:%d mem va:%p,swapIndex:%d\n",memIndex,p->ramPmd[memIndex].va,swapIndex);
+    cprintf("pageToSwapFile: memIndex:%d mem va:%p,swapIndex:%d\n",memIndex,p->ramPmd[memIndex].va,swapIndex);
   #endif
 
   
@@ -575,6 +569,7 @@ void pageToSwapFile(int memIndex, int swapIndex, pde_t *pgdir)
     panic("no space left in swapFile");
   }
 
+  
   //insert founded page to SwapFileArr
   p->swapPmd[swapIndex].pgdir = p->ramPmd[memIndex].pgdir;
   p->swapPmd[swapIndex].offset = swapIndex * PGSIZE;
@@ -584,6 +579,7 @@ void pageToSwapFile(int memIndex, int swapIndex, pde_t *pgdir)
 
   //remove founded page from ramArr
   initPmd(&p->ramPmd[memIndex]);
+  deleteRoot(p->prioArr,memIndex,&p->prioSize);
   p->pagesInMemory--;
   
   char *va = p->ramPmd[memIndex].va;
@@ -721,7 +717,7 @@ void onPageFaultPG(char *va1){
   if(p->pagesInMemory == MAX_PSYC_PAGES){
     if (p->pagesInSwapfile == MAX_TOTAL_PAGES - MAX_PSYC_PAGES)
       panic("allocuvm: No free sapce either in ram and disc");
-    pageToSwapFile(peekHeap(p->prioArr).index, getPageIndex(IN_SWAP, VACANT, CLEAN_VA), p->pgdir);
+    pageToSwapFile(getPageIndex(IN_PHY,OCCUPIED,CLEAN_VA), getPageIndex(IN_SWAP, VACANT, CLEAN_VA), p->pgdir);
   }
   //remove page from swapArr:
   uint swapIndx = getPageIndex(IN_SWAP, OCCUPIED, va1);
@@ -780,7 +776,7 @@ void onPageFault(uint va)
   }
 
   #if DEBUG
-    cprintf("onpagefault_part:pid:%d va1:%p,error:%d,pte:%p,pgdir:%p\n",p->pid,va1,p->tf->err,pte,p->pgdir);
+    cprintf("onpagefault:pid:%d va1:%p,error:%d,pte:%p,pgdir:%p\n",p->pid,va1,p->tf->err,pte,p->pgdir);
   #endif
 
   //ToDo: check tf-err maybe
@@ -794,21 +790,9 @@ void onPageFault(uint va)
 
 }
 
-//in order to prevent panic aquire (like in fork) i split the write/read of pages to 4 chunks
-void readFromSwapFileWrapper(struct proc * p, char* buffer, uint placeOnFile, uint size){
-  int start = placeOnFile;
-  for (int i = 0; i < size/BUF_SIZE; i++)
-  {
-    if(readFromSwapFile(p,buffer+(BUF_SIZE*i),start+(i*BUF_SIZE),BUF_SIZE) == -1)
-      panic("writeToSwapFileWrapper failed");
-  }
-  
-}
-
-
-void swapInt(int *a, int *b)
+void swapPrio(uint *a, uint *b)
 {
-  int temp = *b;
+  uint temp = *b;
   *b = *a;
   *a = temp;
 }
@@ -837,10 +821,11 @@ void updatePageInPriorityQueue(int pageNum)
   //insert the priority queue if not already exist
 
 #if NFUA
+  if (p->ramPmd[pageNum].occupied)
+      deleteRoot(p->prioArr, pageNum, &p->prioSize); //we delete node from heap to make sure replace pld node with new node
+
   if (*pte & PTE_A)
   {
-    if (p->ramPmd[pageNum].occupied)
-      deleteRoot(p->prioArr, pageNum, &p->prioSize); //we delete node from heap to make sure replace pld node with new node
     p->ramPmd[pageNum].age = shiftCounter(1, pageNum);
     insertHeap(p->prioArr, (struct heap_p){pageNum, p->ramPmd[pageNum].age}, &p->prioSize);
     (*pte) &= ~PTE_A;
@@ -853,10 +838,11 @@ void updatePageInPriorityQueue(int pageNum)
 #endif
 
 #if LAPA
+  if (p->ramPmd[pageNum].occupied)
+      deleteRoot(p->prioArr, pageNum, &p->prioSize);
+      
   if (*pte & PTE_A)
   {
-    if (p->ramPmd[pageNum].occupied)
-      deleteRoot(p->prioArr, pageNum, &p->prioSize);
     p->ramPmd[pageNum].age = shiftCounter(1, pageNum);
     insertHeap(p->prioArr, (struct heap_p){pageNum, countSetBits(p->ramPmd[pageNum].age)}, &p->prioSize);
     (*pte) &= ~PTE_A;
@@ -908,7 +894,7 @@ void updatePageInPriorityQueue(int pageNum)
         struct heap_p b = extractMin(temp, &tempSize);
         deleteRoot(p->prioArr, a.index, &p->prioSize);
         deleteRoot(p->prioArr, b.index, &p->prioSize);
-        swapInt(&a.priority, &b.priority);
+        swapPrio(&a.priority, &b.priority);
         insertHeap(p->prioArr, a, &p->prioSize);
         insertHeap(p->prioArr, b, &p->prioSize);
       }
@@ -916,6 +902,10 @@ void updatePageInPriorityQueue(int pageNum)
   }
 
 #endif
+
+lcr3(V2P(p->pgdir));
+
+
 }
 
 void updatePagesInPriorityQueue()
@@ -925,8 +915,10 @@ void updatePagesInPriorityQueue()
     return;
   
 #if NFUA | LAPA
-  for (int i = 0; i < MAX_PSYC_PAGES; i++)
-    updatePageInPriorityQueue(i);
+  for (int i = 0; i < MAX_PSYC_PAGES; i++){
+    if (p->ramPmd[i].occupied)
+      updatePageInPriorityQueue(i);
+  }
 #endif
 
 #if SCFIFO | AQ

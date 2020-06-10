@@ -7,7 +7,7 @@ void fork_cow_with_swap() {
     printf(1,"fork_cow_with_swap starting.........\n");
     int pages = 22;
     // printf(1, "asking for %d pages\n",pages);
-    char *buf = malloc(4096 * pages);
+    char *buf = sbrk(4096 * pages);
     for (int i = 0; i < pages; i++) {
         buf[i * 4096] = 'a';
     }
@@ -30,6 +30,7 @@ void fork_cow_with_swap() {
             printf(1, "father data: %c\n", buf[i * 4096]);
         }
         wait();
+        sbrk(-4096 * pages);
     }
 }
 
@@ -39,7 +40,7 @@ void fork_cow_no_swap() {
 
     int pages = 10;
     // printf(1, "asking for %d pages\n",pages);
-    char *buf = malloc(4096 * pages);
+    char *buf = sbrk(4096 * pages);
     for (int i = 0; i < pages; i++) {
         sleep(1);
         buf[i * 4096] = 'a';
@@ -65,6 +66,7 @@ void fork_cow_no_swap() {
         }
         wait();
         printf(1, "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFballoc\n");
+        sbrk(-4096 * pages);
     }
 }
 

@@ -78,7 +78,7 @@ void trap(struct trapframe *tf)
     lapiceoi();
     break;
   case T_PGFLT:
-    myproc()->tf = tf;
+    //myproc()->tf = tf;
     onPageFault(rcr2());
     if (myproc()->killed)
       exit();
