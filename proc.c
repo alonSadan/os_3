@@ -638,8 +638,15 @@ void procdump(void)
 
 void increaseProcAge(){
   struct proc* p = myproc();
-  for(int i=0; i<MAX_PSYC_PAGES;i++){
-    if((p->ramPmd[i].occupied))
-      p->ramPmd[i].age++;     
+  
+  for(int i=0; i<MAX_PRIO_ARR;i++){
+    int pageNum = p->prioArr[i].index;
+    if (pageNum != -1){
+      if((p->ramPmd[i].occupied)){
+        p->ramPmd[i].age++;
+        p->prioArr[i].priority++;
+      }     
+    }
+    
   }
 }
