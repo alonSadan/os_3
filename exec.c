@@ -45,6 +45,7 @@ int exec(char *path, char **argv)
   //reset
   initPmdArr(curproc->ramPmd,MAX_PSYC_PAGES);
   initPmdArr(curproc->swapPmd,MAX_TOTAL_PAGES-MAX_PSYC_PAGES);
+  initHeap(curproc->prioArr,MAX_PRIO_ARR);
   curproc->prioSize = 0; 
   curproc->pagesInMemory = 0;
   curproc->pagesInSwapfile = 0;

@@ -91,6 +91,13 @@ struct heap_p extractMin(struct heap_p array[],int *sizePtr){
     return root; 
 }
 
+void initHeap(struct heap_p array[],int size){
+  for (int i = 0;i < size;i++){
+    array[i].index = -1;
+    array[i].priority = -1;
+  }
+}
+
 struct heap_p findInHeap(struct heap_p array[],int pageNum,int *sizePtr){
   struct heap_p temp = deleteRoot(array,pageNum,sizePtr);
   if (temp.index != -1){

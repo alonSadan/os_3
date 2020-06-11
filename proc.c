@@ -119,6 +119,8 @@ found:
 
   initPmdArr(p->ramPmd,MAX_PSYC_PAGES);
   initPmdArr(p->swapPmd,MAX_TOTAL_PAGES - MAX_PSYC_PAGES);
+  initHeap(p->prioArr,MAX_PRIO_ARR);
+
 
   p->pagesInMemory = 0;
   p->pagesInSwapfile = 0;
@@ -225,12 +227,18 @@ int fork(void)
 
   for (int i = 0; i < MAX_PSYC_PAGES; i++)
   {
-    if(np->ramPmd[i].occupied) 
+    if(curproc->ramPmd[i].occupied) 
       np->ramPmd[i]= curproc->ramPmd[i];
-    if(np->swapPmd[i].occupied && curproc->pid > 2){
+    if(curproc->swapPmd[i].occupied && curproc->pid > 2){
       readFromSwapFile(curproc,buffer,curproc->swapPmd[i].offset,PGSIZE);
       writeToSwapFile(np,buffer,curproc->swapPmd[i].offset,PGSIZE);
-    }
+      np->swapPmd[i]= curproc->swapPmd[i];
+    }    
+  }
+
+  for (int i = 0; i < MAX_PSYC_PAGES; i++)
+  {
+    np->prioArr[i] = curproc->prioArr[i];
   }
   
   np->sz = curproc->sz;
@@ -363,6 +371,7 @@ int wait(void)
 
         initPmdArr(p->ramPmd,MAX_PSYC_PAGES);
         initPmdArr(p->swapPmd,MAX_TOTAL_PAGES - MAX_PSYC_PAGES);
+        initHeap(p->prioArr,MAX_PRIO_ARR);
 
         p->prioSize = 0;
         p->pagesInMemory = 0;

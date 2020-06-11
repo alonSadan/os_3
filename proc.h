@@ -94,7 +94,7 @@ struct proc
   int pagedout;
   //struct freePageInSwap *head;
 
-  struct heap_p prioArr[MAX_PSYC_PAGES*2+1];
+  struct heap_p prioArr[MAX_PRIO_ARR];
   int prioSize;
 
   //volatile int pagefaultLock;
