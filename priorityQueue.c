@@ -106,3 +106,20 @@ struct heap_p findInHeap(struct heap_p array[],int pageNum,int *sizePtr){
   return temp;
   
 }
+
+int findMaxElementIndex(struct heap_p array[],int size){
+  int maximumElementPrio = array[size / 2].priority; 
+  int maximumElementIndex = size/2;
+
+  for (int i = 1 + size / 2; i < size; i++){ 
+    if (array[i].priority > maximumElementPrio){
+      maximumElementIndex = i;
+      maximumElementPrio = array[i].priority;
+    }
+   
+  }
+
+  return maximumElementIndex;
+
+
+}

@@ -5,7 +5,7 @@
 void fork_cow_with_swap() {
     //bug: exit garbage 
     printf(1,"fork_cow_with_swap starting.........\n");
-    int pages = 18;
+    int pages = 21;
     // printf(1, "asking for %d pages\n",pages);
     char *buf = sbrk(4096 * pages);
     for (int i = 0; i < pages; i++) {
@@ -24,7 +24,7 @@ void fork_cow_with_swap() {
         for (int i = 0; i < pages; i++) {
             printf(1, "child data after change: %c\n", buf[i * 4096]);
         }
-
+        exit();
     } else {
         for (int i = 0; i < pages; i++) {
             printf(1, "father data: %c\n", buf[i * 4096]);

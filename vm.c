@@ -261,7 +261,8 @@ void insertPageToPrioQueue(int pageNum)
   insertHeap(p->prioArr, (struct heap_p){pageNum, countSetBits(p->ramPmd[pageNum].age)}, &p->prioSize);
 #endif
 #if SCFIFO | AQ
-  insertHeap(p->prioArr, (struct heap_p){pageNum, p->prioArr[p->prioSize].priority + 1}, &p->prioSize);
+  int indx = findMaxElementIndex(p->prioArr,p->prioSize);
+  insertHeap(p->prioArr, (struct heap_p){pageNum, p->prioArr[indx].priority + 1}, &p->prioSize);
 #endif
 
 }
@@ -290,7 +291,7 @@ int allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
   for (; a < newsz; a += PGSIZE)
   {
     #if NONE
-      no_skip = 1;
+      no_skip = 0;
     #endif
     
     if (no_skip){
@@ -372,13 +373,24 @@ int deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
         
           if (p->ramPmd[idex].occupied)
           {
-            --p->pagesInMemory;
+            p->pagesInMemory--;
             deleteRoot(p->prioArr, idex, &p->prioSize);
             initPmd(&p->ramPmd[idex]);
           }       
         }
 
-        //ToDo: check if need to deallocuvm for PG as well    
+        //ToDo: check if need to deallocuvm for PG as well   
+        idex = getPagePgdirIndex(IN_SWAP, pgdir, (char *)a);
+        //idex = getPageIndex(IN_PHY, OCCUPIED, (char *)a);
+        if (idex != -1)
+        {
+        
+          if (p->swapPmd[idex].occupied)
+          {
+            p->pagesInSwapfile--;
+            initPmd(&p->swapPmd[idex]);
+          }       
+        } 
       }
 
       *pte = 0;
@@ -893,7 +905,8 @@ void updatePageInPriorityQueue(int pageNum)
       deleteRoot(p->prioArr, pageNum, &p->prioSize);
     }
     //pushing page to the end of the list by giving him max prio + 1
-    insertHeap(p->prioArr, (struct heap_p){pageNum, p->prioArr[p->prioSize - 1].priority + 1}, &p->prioSize);
+     int lastIndex = findMaxElementIndex(p->prioArr,p->prioSize);
+    insertHeap(p->prioArr, (struct heap_p){pageNum, p->prioArr[lastIndex].priority + 1}, &p->prioSize);
     (*pte) &= ~PTE_A;
   }
   else
@@ -906,12 +919,14 @@ void updatePageInPriorityQueue(int pageNum)
 #if AQ
   if (*pte & PTE_A)
   {
-    if (p->prioArr[p->prioSize - 1].index != pageNum)
+    int lastIndex = findMaxElementIndex(p->prioArr,p->prioSize);
+
+    if (lastIndex != pageNum)
     {
       struct heap_p a = deleteRoot(p->prioArr, pageNum, &p->prioSize);
       if (a.index == -1)
       {
-        insertHeap(p->prioArr, (struct heap_p){pageNum, p->prioArr[p->prioSize - 1].priority + 1}, &p->prioSize);
+        insertHeap(p->prioArr, (struct heap_p){pageNum, p->prioArr[lastIndex].priority + 1}, &p->prioSize);
       }
       else
       {
@@ -930,6 +945,7 @@ void updatePageInPriorityQueue(int pageNum)
         insertHeap(p->prioArr, b, &p->prioSize);
       }
     }
+     (*pte) &= ~PTE_A;
   }
 
 #endif
