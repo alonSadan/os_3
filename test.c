@@ -4,9 +4,10 @@
 
 void fork_cow_with_swap() {
     //bug: exit garbage 
-    int pages = 24;
+    printf(1,"fork_cow_with_swap starting.........\n");
+    int pages = 21;
     // printf(1, "asking for %d pages\n",pages);
-    char *buf = malloc(4096 * pages);
+    char *buf = sbrk(4096 * pages);
     for (int i = 0; i < pages; i++) {
         buf[i * 4096] = 'a';
     }
@@ -23,19 +24,23 @@ void fork_cow_with_swap() {
         for (int i = 0; i < pages; i++) {
             printf(1, "child data after change: %c\n", buf[i * 4096]);
         }
-
+        exit();
     } else {
         for (int i = 0; i < pages; i++) {
             printf(1, "father data: %c\n", buf[i * 4096]);
         }
         wait();
+        sbrk(-4096 * pages);
     }
 }
 
 void fork_cow_no_swap() {
+    printf(1,"fork_cow_no_swap starting.........\n");
+
+
     int pages = 10;
     // printf(1, "asking for %d pages\n",pages);
-    char *buf = malloc(4096 * pages);
+    char *buf = sbrk(4096 * pages);
     for (int i = 0; i < pages; i++) {
         sleep(1);
         buf[i * 4096] = 'a';
@@ -61,6 +66,7 @@ void fork_cow_no_swap() {
         }
         wait();
         printf(1, "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFballoc\n");
+        sbrk(-4096 * pages);
     }
 }
 
@@ -75,14 +81,10 @@ void simple_fork(){
 }
 
 void swap_no_fork() {
-    //dealloc version 1 (with pgdir):
-    //  bug:in the end try to run exit on pid 2 (which is bad !!) and then panic acquire
-    //  working pages Numbers:0-15,17,21,22,23,25...
-    //dealloc version 2 (without pgdir):
-    //  bug: in the end try to run exit with garbage va 
-    //  working pages number:0-15, 16+(some works some dont)
-
-    int pages = 25;
+    
+    printf(1,"swap_no_fork starting.........\n");
+   
+    int pages = 24;
     // printf(1, "asking for %d pages\n",pages);
     char *buf = sbrk(4096 * pages);
     for (int i = 0; i < pages; i++) {
@@ -97,6 +99,8 @@ void swap_no_fork() {
     // sleep(10);
     //free(buf);
     sbrk(-4096 * pages);
+    //char input[10];
+    //gets(input, 10);
 }
 
 void nfu_test() {
@@ -221,12 +225,9 @@ void test1()
 
 int main(int argc, char *argv[])
 {
-    //test1();
+
     //fork_cow_no_swap();
-    swap_no_fork(); //working for some number of pages
-    //nfu_test();
-    //scfifo_test();
-    //fork_cow_with_swap(); // not working (check maybe previous versions when it works sometimes)
-    //simple_fork();
+    //swap_no_fork();
+    fork_cow_with_swap(); // "working" for some number of pages 
     exit();
 }
