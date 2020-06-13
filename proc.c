@@ -217,8 +217,17 @@ int fork(void)
   //cprintf("fork np pid:%d\n",np->pid);
 
   // Copy process state from proc.
-  if ((np->pgdir = cowuvm(curproc->pgdir, curproc->sz)) == 0)
-  { //if cowuvm fails so
+
+  if (curproc->pid <= 2)
+  {
+    np->pgdir = cowuvm(curproc->pgdir, curproc->sz);
+  }
+  else
+  {
+    np->pgdir = copyuvm(curproc->pgdir, curproc->sz);
+  }
+  if (np->pgdir == 0)
+  { //if cowuvm or copyuvm fails so
     kfree(np->kstack);
     np->kstack = 0;
     np->state = UNUSED;
@@ -243,16 +252,16 @@ int fork(void)
   np->pagedout = 0;
   np->pagefaults = 0;
 
-  for (int i = 0; i < MAX_PSYC_PAGES; i++)
-  {
-    if (np->ramPmd[i].occupied)
-      np->ramPmd[i].pgdir = np->pgdir;
-    if (np->swapPmd[i].occupied)
-      np->swapPmd[i].pgdir = np->pgdir;
-  }
-
   if (curproc->pid > 2)
   {
+    for (int i = 0; i < MAX_PSYC_PAGES; i++)
+    {
+      if (np->ramPmd[i].occupied)
+        np->ramPmd[i].pgdir = np->pgdir;
+      if (np->swapPmd[i].occupied)
+        np->swapPmd[i].pgdir = np->pgdir;
+    }
+
     np->pagesInMemory = curproc->pagesInMemory;
     np->pagesInSwapfile = curproc->pagesInSwapfile;
     np->prioSize = curproc->prioSize;
@@ -422,9 +431,12 @@ int wait(void)
         // Found one.
         //cprintf("proc.c free zobie\n");
         pid = p->pid;
-        if (decrementReferencesAndGetPrevVal(p->kstack) == 1)
+        if (curproc->pid  > 2)
         {
-          kfree(p->kstack);
+          if (decrementReferencesAndGetPrevVal(p->kstack) == 1)
+          {
+            kfree(p->kstack);
+          }
         }
         // if (getNumberReferences(p->kstack) == 1)
         // {
@@ -440,13 +452,15 @@ int wait(void)
         p->killed = 0;
         p->state = UNUSED;
 
-        initPmdArr(p, p->ramPmd);
-        initPmdArr(p, p->swapPmd);
+        if (curproc->pid > 2)
+        {
+          initPmdArr(p, p->ramPmd);
+          initPmdArr(p, p->swapPmd);
 
-        p->prioSize = 0;
-        p->pagesInMemory = 0;
-        p->prioSize = 0;
-
+          p->prioSize = 0;
+          p->pagesInMemory = 0;
+          p->prioSize = 0;
+        }
         // memset(p->swapPmd, 0, MAX_PSYC_PAGES * sizeof(struct paging_meta_data));
         // memset(p->ramPmd, 0, MAX_PSYC_PAGES * sizeof(struct paging_meta_data));
         // p->pagesInSwapfile = 0;
@@ -510,9 +524,12 @@ int wait2(int *memoryPages, int *swapPages, int *pageFaults, int *pagedOut)
         // Found one.
         //cprintf("proc.c free zobie\n");
         pid = p->pid;
-        if (decrementReferencesAndGetPrevVal(p->kstack) == 1)
+        if (curproc->pid > 2)
         {
-          kfree(p->kstack);
+          if (decrementReferencesAndGetPrevVal(p->kstack) == 1)
+          {
+            kfree(p->kstack);
+          }
         }
         // if (getNumberReferences(p->kstack) == 1)
         // {
@@ -520,11 +537,13 @@ int wait2(int *memoryPages, int *swapPages, int *pageFaults, int *pagedOut)
         // }else{
         //   decrementReferences(p->kstack);
         // }
-        
-        *memoryPages = p->pagesInMemory;
-        *swapPages = p->pagesInSwapfile;
-        *pageFaults =  p->pagefaults;
-        *pagedOut = p->pagedout;
+        if (curproc->pid > 2)
+        {
+          *memoryPages = p->pagesInMemory;
+          *swapPages = p->pagesInSwapfile;
+          *pageFaults = p->pagefaults;
+          *pagedOut = p->pagedout;
+        }
         p->kstack = 0;
         freevm(p->pgdir);
         p->pid = 0;
@@ -533,13 +552,15 @@ int wait2(int *memoryPages, int *swapPages, int *pageFaults, int *pagedOut)
         p->killed = 0;
         p->state = UNUSED;
 
-        initPmdArr(p, p->ramPmd);
-        initPmdArr(p, p->swapPmd);
+        if (curproc->pid > 2)
+        {
+          initPmdArr(p, p->ramPmd);
+          initPmdArr(p, p->swapPmd);
 
-        p->prioSize = 0;
-        p->pagesInMemory = 0;
-        p->prioSize = 0;
-
+          p->prioSize = 0;
+          p->pagesInMemory = 0;
+          p->prioSize = 0;
+        }
         // memset(p->swapPmd, 0, MAX_PSYC_PAGES * sizeof(struct paging_meta_data));
         // memset(p->ramPmd, 0, MAX_PSYC_PAGES * sizeof(struct paging_meta_data));
         // p->pagesInSwapfile = 0;

@@ -55,8 +55,8 @@ int main(int argc, char **argv)
     // testcow1();
     // testcow2();
     // testcow3();
-     EladTestfork();
-    // EladTest1();
+   //  EladTestfork();
+     EladTest1();
     // printf(1, "automate tests passed!!!!!!!!!!\n");
     // printf(1, "please check the satats:\n");
     // //pageReplacmentStats();
@@ -528,9 +528,10 @@ void EladTestfork()
     }
 }
 
-void EladTest1()
+void 
+EladTest1()
 {
-    int pages = 18;
+    int pages = 16;
     // printf(1, "asking for %d pages\n",pages);
     char *buf = malloc(4096 * pages);
     for (int i = 0; i < pages; i++)
@@ -540,7 +541,7 @@ void EladTest1()
     printf(1, "good\n");
     for (int i = 0; i < pages; i++)
     {
-        printf(1, "data: %c\n", buf[i * 4096]);
+    printf(1, "data: %c\n", buf[i * 4096]);
     }
 
     printf(1, "calling free\n");

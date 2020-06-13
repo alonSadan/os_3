@@ -12,7 +12,7 @@
 #define OCCUPIED 1
 #define VACANT 0
 
-#define BUF_SIZE (PGSIZE/4)
+#define BUF_SIZE (PGSIZE / 4)
 
 // #define NONE
 // #define NFUA
@@ -266,7 +266,7 @@ int allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
   uint indx;
   struct proc *p = myproc();
   //pte_t *pte;
-  if (newsz >= KERNBASE)  //se that virtual address is not s kernel space
+  if (newsz >= KERNBASE) //se that virtual address is not s kernel space
     return 0;
   if (newsz < oldsz)
     return oldsz;
@@ -274,18 +274,21 @@ int allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
   a = PGROUNDUP(oldsz);
   for (; a < newsz; a += PGSIZE)
   {
-    if (p->pagesInMemory >= MAX_PSYC_PAGES)
+    if (p->pid > 2)
     {
-      swapPages(getPageIndex(IN_PHY, OCCUPIED, (char *)-1), getPageIndex(IN_SWAP, VACANT, (char *)-1), pgdir, (char *)a);
-    }
-    else
-    {
-      indx = getPageIndex(IN_PHY, VACANT, (char *)-1);
-      p->ramPmd[indx].va = (char *)a;
-      p->ramPmd[indx].pgdir = pgdir;
-      p->ramPmd[indx].occupied = 1;
-      ++p->pagesInMemory;
-      insertPageToPrioQueue(indx);
+      if (p->pagesInMemory >= MAX_PSYC_PAGES)
+      {
+        swapPages(getPageIndex(IN_PHY, OCCUPIED, p->ramPmd[peekHeap(p->prioArr).index].va), getPageIndex(IN_SWAP, VACANT, (char *)-1), pgdir, (char *)a);
+      }
+      else
+      {
+        indx = getPageIndex(IN_PHY, VACANT, (char *)-1);
+        p->ramPmd[indx].va = (char *)a;
+        p->ramPmd[indx].pgdir = pgdir;
+        p->ramPmd[indx].occupied = 1;
+        ++p->pagesInMemory;
+        insertPageToPrioQueue(indx);
+      }
     }
 
     //cprintf("allocuvm: a:%d, pages in memory:%d pages in swapFile:%d\n",a,p->pagesInMemory,p->pagesInSwapfile);
@@ -333,8 +336,16 @@ int deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       if (pa == 0)
         panic("kfree");
       char *v = P2V(pa);
-      if (decrementReferencesAndGetPrevVal(v) == 1){
-        kfree(v);
+      if (p->pid > 2)
+      {
+        if (decrementReferencesAndGetPrevVal(v) == 1)
+        {
+          kfree(v);
+        }
+      }
+      else
+      {
+        _kfree(v);
       }
       // if (getNumberReferences(v) == 1)
       // {
@@ -345,23 +356,26 @@ int deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       //   decrementReferences(v);
       // }
 
-      //ToDo: check why for some reason getPageIndex work better than getPageIndex
-      idex = getPagePgdirIndex(IN_PHY, pgdir, (char *)a);
-      //idex = getPageIndex(IN_PHY, OCCUPIED, (char *)a);
-      if (idex != -1)
+      if (p->pid > 2)
       {
-        //cprintf("deallocum: found indx:%p\n",idex);
-
-        //cprintf("1234\n");
-        if (p->ramPmd[idex].occupied)
+        //ToDo: check why for some reason getPageIndex work better than getPageIndex
+        idex = getPagePgdirIndex(IN_PHY, pgdir, (char *)a);
+        //idex = getPageIndex(IN_PHY, OCCUPIED, (char *)a);
+        if (idex != -1)
         {
-          --p->pagesInMemory;
-          deleteRoot(p->prioArr, idex, &p->prioSize);
-          initPmd(&p->ramPmd[idex]);
+          //cprintf("deallocum: found indx:%p\n",idex);
+
+          //cprintf("1234\n");
+          if (p->ramPmd[idex].occupied)
+          {
+            --p->pagesInMemory;
+            deleteRoot(p->prioArr, idex, &p->prioSize);
+            initPmd(&p->ramPmd[idex]);
+          }
         }
 
         //initPmd(p,p->ramPmd);
-        
+
         //memset(&p->ramPmd[idex], 0, sizeof(struct paging_meta_data));
       }
       //ToDo: maybe back to this change
@@ -393,8 +407,16 @@ void freevm(pde_t *pgdir)
     if (pgdir[i] & PTE_P)
     {
       char *v = P2V(PTE_ADDR(pgdir[i]));
-      if (decrementReferencesAndGetPrevVal(v) == 1){
-        kfree(v);
+      if (myproc()->pid > 2)
+      {
+        if (decrementReferencesAndGetPrevVal(v) == 1)
+        {
+          kfree(v);
+        }
+      }
+      else
+      {
+        _kfree(v);
       }
       // if (getNumberReferences(v) == 1)
       // {
@@ -404,10 +426,10 @@ void freevm(pde_t *pgdir)
       // {
       //   decrementReferences(v);
       // }
-     // kfree(v); //delete physical page
+      // kfree(v); //delete physical page
     }
   }
-  kfree((char *)pgdir);
+  _kfree((char *)pgdir);
 }
 
 // Clear PTE_U on a page. Used to create an inaccessible
@@ -488,9 +510,9 @@ cowuvm(pde_t *pgdir, uint sz)
 
     if (*pte & PTE_PG)
     {
-      pte = walkpgdir(d, (char *)i, 0); 
-      *pte |= PTE_PG;                   //in swapFile
-      *pte &= ~PTE_P;                   //not in ram
+      pte = walkpgdir(d, (char *)i, 0);
+      *pte |= PTE_PG; //in swapFile
+      *pte &= ~PTE_P; //not in ram
       *pte |= PTE_COW;
       *pte &= ~PTE_W;
       lcr3(V2P(myproc()->pgdir));
@@ -562,30 +584,31 @@ int copyout(pde_t *pgdir, uint va, void *p, uint len)
 }
 
 //in order to prevent panic aquire (like in fork) i split the write/read of pages to 4 chunks
-void writeToSwapFileWrapper(struct proc * p, char* buffer, uint placeOnFile, uint size){
+void writeToSwapFileWrapper(struct proc *p, char *buffer, uint placeOnFile, uint size)
+{
   int start = placeOnFile;
-  for (int i = 0; i < size/BUF_SIZE; i++)
+  for (int i = 0; i < size / BUF_SIZE; i++)
   {
-    if(writeToSwapFile(p,buffer+(BUF_SIZE*i),start+(i*BUF_SIZE),BUF_SIZE) == -1)
+    if (writeToSwapFile(p, buffer + (BUF_SIZE * i), start + (i * BUF_SIZE), BUF_SIZE) == -1)
       panic("writeToSwapFileWrapper failed");
   }
-  
 }
-
 
 //
 void swapPages(int memIndex, int swapIndex, pde_t *pgdir, char *a)
 {
+
+  //if pid is more than 2
   struct proc *p = myproc();
   //cprintf("swapPages: memIndex:%d,swapIndex:%d\n",swapIndex,memIndex);
   if (memIndex == -1)
     panic("no valid memIndex");
 
-  if (swapIndex == -1){
+  if (swapIndex == -1)
+  {
     cprintf("swapPages: pid of panic process is %d\n", p->pid);
     panic("no space left in swapFile");
   }
-
 
   p->swapPmd[swapIndex].pgdir = p->ramPmd[memIndex].pgdir;
   p->swapPmd[swapIndex].offset = swapIndex * PGSIZE;
@@ -597,15 +620,15 @@ void swapPages(int memIndex, int swapIndex, pde_t *pgdir, char *a)
   //   panic("swapPages: failed to write to swap file");
   // }
   writeToSwapFileWrapper(p, (char *)PTE_ADDR(p->ramPmd[memIndex].va), swapIndex * PGSIZE, PGSIZE);
- 
-  
+
   p->pagedout++;
 
   //get pyshical adr and clean old page in memory:
   char *va = p->ramPmd[memIndex].va;
   pte_t *pte = walkpgdir(pgdir, va, 0);
   uint pa = PTE_ADDR(*pte); //get address of page, no offset
-  if (decrementReferencesAndGetPrevVal(P2V(pa)) == 1){
+  if (decrementReferencesAndGetPrevVal(P2V(pa)) == 1)
+  {
     kfree(P2V(pa));
   }
   // if (getNumberReferences(P2V(pa)) == 1)
@@ -714,15 +737,20 @@ uint getPagePgdirIndex(int inSwapFile, pde_t *pgdir, char *va)
   struct proc *p = myproc();
   struct paging_meta_data *pg;
   pg = inSwapFile ? p->swapPmd : p->ramPmd;
-  if (inSwapFile){
-    for (int c = 0; pg < &p->swapPmd[MAX_PSYC_PAGES]; pg++, c++){
+  if (inSwapFile)
+  {
+    for (int c = 0; pg < &p->swapPmd[MAX_PSYC_PAGES]; pg++, c++)
+    {
       if (pg->pgdir == pgdir && pg->va == va)
-          return c;
+        return c;
     }
-  }else{
-    for (int c = 0; pg < &p->ramPmd[MAX_PSYC_PAGES]; pg++, c++){
+  }
+  else
+  {
+    for (int c = 0; pg < &p->ramPmd[MAX_PSYC_PAGES]; pg++, c++)
+    {
       if (pg->pgdir == pgdir && pg->va == va)
-          return c;
+        return c;
     }
   }
   return -1;
@@ -734,7 +762,10 @@ static void onPageFault1(char *va1, uint pa, int swapIndx, int ramIndx);
 
 void onPageFault(uint va)
 { //va is the wanted address which is not found in ohysical memory
-
+  if (myproc()->pid > 2)
+  {
+    return;
+  }
   myproc()->pagefaults++;
   //to get the start of the va's page
   struct proc *p = myproc();
@@ -746,7 +777,6 @@ void onPageFault(uint va)
 
   //cprintf("onpagefault_part1:pid:%d va1:%p,error:%d\n",p->pid,va1,p->tf->err);
 
-
   if (va >= KERNBASE || (pte = walkpgdir(p->pgdir, va1, 0)) == 0)
   {
     //cprintf("pid %d %s: Page fault: access to invalid address.va1:%p,pgNum:%d,err:%d\n", p->pid, p->name,va1,((uint)va1/PGSIZE),err);
@@ -754,17 +784,21 @@ void onPageFault(uint va)
   }
 
   //task2:
-  if(err & ERR_WR){
-    if (*pte & PTE_COW){
-      pa = PTE_ADDR(*pte);      
+
+  if (err & ERR_WR)
+  {
+    if (*pte & PTE_COW)
+    {
+      pa = PTE_ADDR(*pte);
       char *v = P2V(pa);
       flags = PTE_FLAGS(*pte);
       //notice: only dec if refs > 1
-      int refs = decrementReferencesAndGetPrevVal(v);//getNumberReferences(v);
+      int refs = decrementReferencesAndGetPrevVal(v); //getNumberReferences(v);
       // cprintf("cow::::::::::: pid:%d va1:%p,refs:%d\n",p->pid,va1,refs);
       if (refs > 1)
-      {        
-        if ((mem = kalloc()) == 0){
+      {
+        if ((mem = kalloc()) == 0)
+        {
           // cprintf("onpagefault: cow: mem failed\n");
           goto cleanup;
         }
@@ -779,16 +813,22 @@ void onPageFault(uint va)
         *pte &= ~PTE_COW;
       }
       lcr3(V2P(p->pgdir));
-    }else{
-      if (!(*pte & PTE_PG) && !(*pte & PTE_P)){
-      //  cprintf("33333333333: pid:%d, va1:%p num:%d\n",p->pid,va1,p->tf->err);
+    }
+    else
+    {
+      if (!(*pte & PTE_PG) && !(*pte & PTE_P))
+      {
+        //  cprintf("33333333333: pid:%d, va1:%p num:%d\n",p->pid,va1,p->tf->err);
         goto cleanup;
       }
     }
-  }else{
+  }
+  else
+  {
     //not a write fault
-    if (!(*pte & PTE_PG) && !(*pte & PTE_P)){
-   //   cprintf("444444444444444: pid:%d, va1:%p num:%d\n",p->pid,va1,p->tf->err);
+    if (!(*pte & PTE_PG) && !(*pte & PTE_P))
+    {
+      //   cprintf("444444444444444: pid:%d, va1:%p num:%d\n",p->pid,va1,p->tf->err);
       goto cleanup;
     }
   }
@@ -816,32 +856,31 @@ void onPageFault(uint va)
   uint ramIndx = p->pagesInMemory == MAX_PSYC_PAGES ? -1 : getPageIndex(IN_PHY, VACANT, (char *)-1);
   //cprintf("onpagefault: insert page to mem: memIndex=%d,swapIndexd=%d,va1:%p\n",ramIndx,swapIndx,va1);
 
-
   if (p->pagesInMemory < MAX_PSYC_PAGES)
   {
     onPageFault1(va1, pa, swapIndx, ramIndx); // set flags to point that the page is in physical memory, and update physical data structure
     --p->pagesInSwapfile;
     ++p->pagesInMemory;
   }
-  else                                              // no place in physical memory,and the required  page is in swap file
-  {                                                 //we dont have place in physical memory.
+  else                                                    // no place in physical memory,and the required  page is in swap file
+  {                                                       //we dont have place in physical memory.
     ramIndx = getPageIndex(IN_PHY, OCCUPIED, (char *)-1); //get some physical index to be cleared
-    if (ramIndx == -1){
+    if (ramIndx == -1)
+    {
       panic("onPageFault: no found page in memory");
     }
     //cprintf("onpagefault:ram is full - remove pageNum:%d from mem\n",ramIndx);
 
     struct paging_meta_data tmp;
-    tmp = p->ramPmd[ramIndx];                       //use tmp for swapping
-    onPageFault1(va1, pa, swapIndx, ramIndx);       // set flags to point that the page is in physical memory, and update physical data structure, mark place in swap as vacant
+    tmp = p->ramPmd[ramIndx];                             //use tmp for swapping
+    onPageFault1(va1, pa, swapIndx, ramIndx);             // set flags to point that the page is in physical memory, and update physical data structure, mark place in swap as vacant
     swapIndx = getPageIndex(IN_SWAP, VACANT, (char *)-1); // get a vacant index in swap data structure, after we cleared it in previous line
-   // cprintf("onpagefault:ram is full - insert pageNum:%d with va:%p from mem to SwapIndex:%d\n",ramIndx,tmp.va,swapIndx);
+                                                          // cprintf("onpagefault:ram is full - insert pageNum:%d with va:%p from mem to SwapIndex:%d\n",ramIndx,tmp.va,swapIndx);
 
     // if ((uint)tmp.va == PGSIZE){
     //   cprintf("1oh no. if u get here we will see panic in the end!!!!!!!!!!!!!!!!!!!!!!!!!\n");
     // }
 
-    
     if (swapIndx == -1)
     {
       panic("onPageFault: no free space on swapFile");
@@ -860,11 +899,11 @@ void onPageFault(uint va)
     pte = walkpgdir(p->pgdir, p->swapPmd[swapIndx].va, 0);
     uint ramPa = PTE_ADDR(*pte);
 
-    if ((uint)tmp.va == PGSIZE){
+    if ((uint)tmp.va == PGSIZE)
+    {
       cprintf("oh no. if u get here we will see panic in the end!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-      cprintf("ramPa:%d,pgdir:%d\n",ramPa,p->pgdir);
+      cprintf("ramPa:%d,pgdir:%d\n", ramPa, p->pgdir);
     }
-
 
     *pte |= PTE_PG; //in swapFile
     *pte &= ~PTE_P; //not in ram
@@ -886,31 +925,29 @@ void onPageFault(uint va)
     // {
     //   decrementReferences(P2V(ramPa));
     // }
-    if (decrementReferencesAndGetPrevVal(P2V(ramPa)) == 1){
+    if (decrementReferencesAndGetPrevVal(P2V(ramPa)) == 1)
+    {
       kfree(P2V(ramPa));
     }
-    
   }
   memmove((char *)va1, buffer, PGSIZE); //copy page to physical memory
   return;
 
-  cleanup:
+cleanup:
   p->killed = 1;
   return;
-
 }
 
 //in order to prevent panic aquire (like in fork) i split the write/read of pages to 4 chunks
-void readFromSwapFileWrapper(struct proc * p, char* buffer, uint placeOnFile, uint size){
+void readFromSwapFileWrapper(struct proc *p, char *buffer, uint placeOnFile, uint size)
+{
   int start = placeOnFile;
-  for (int i = 0; i < size/BUF_SIZE; i++)
+  for (int i = 0; i < size / BUF_SIZE; i++)
   {
-    if(readFromSwapFile(p,buffer+(BUF_SIZE*i),start+(i*BUF_SIZE),BUF_SIZE) == -1)
+    if (readFromSwapFile(p, buffer + (BUF_SIZE * i), start + (i * BUF_SIZE), BUF_SIZE) == -1)
       panic("writeToSwapFileWrapper failed");
   }
-  
 }
-
 
 static void onPageFault1(char *va1, uint pa, int swapIndx, int ramIndx)
 {
@@ -1001,7 +1038,8 @@ void updatePageInPriorityQueue(int pageNum)
 #if SCFIFO
   if (*pte & PTE_A)
   {
-    if (p->ramPmd[pageNum].occupied){
+    if (p->ramPmd[pageNum].occupied)
+    {
       //cprintf("SCFIFO: pid%d pageNum:%d with va:%p was good boy -> transfer it to last place\n",p->pid,pageNum,p->ramPmd[pageNum].va);
       deleteRoot(p->prioArr, pageNum, &p->prioSize);
     }
@@ -1053,7 +1091,7 @@ void updatePagesInPriorityQueue()
   struct proc *p = myproc();
   if (p->pid <= 2)
     return;
-  
+
 #if NFUA | LAPA
   for (int i = 0; i < MAX_PSYC_PAGES; i++)
     updatePageInPriorityQueue(i);
