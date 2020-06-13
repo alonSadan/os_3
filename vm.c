@@ -62,7 +62,7 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
   pte_t *pgtab;
 
   pde = &pgdir[PDX(va)];
-  if (*pde & PTE_P) //if page table entry is present
+  if (*pde & PTE_P) //if page directory entry is present
   {
     pgtab = (pte_t *)P2V(PTE_ADDR(*pde));
   }
@@ -276,7 +276,7 @@ int allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
   uint indx;
   struct proc *p = myproc();
   //pte_t *pte;
-  if (newsz >= KERNBASE)
+  if (newsz >= KERNBASE)  //se that virtual address is not s kernel space
     return 0;
   if (newsz < oldsz)
     return oldsz;
