@@ -651,9 +651,31 @@ void increaseProcAge(){
     if (pageNum != -1){
       if((p->ramPmd[i].occupied)){
         p->ramPmd[i].age++;
-        p->prioArr[i].priority++;
+        p->prioArr[pageNum].priority++;
       }     
     }
     
+  }
+}
+
+void decAqValues(uint index){
+  struct proc* p = myproc();
+  int prioIndex = -1;
+  for(int i=0; i<MAX_PSYC_PAGES;i++){
+    if (index == p->prioArr[i].index){
+      prioIndex = i;
+      break;
+    }
+  }
+
+  if(prioIndex == -1) 
+    return;
+
+  for(int i=0; i<MAX_PSYC_PAGES;i++){
+    if (p->prioArr[i].index != -1){
+      if (p->prioArr[i].priority > p->prioArr[prioIndex].priority) {
+        p->prioArr[i].priority--;
+      }
+    }
   }
 }

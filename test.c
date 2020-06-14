@@ -5,7 +5,7 @@
 void fork_cow_with_swap() {
     //bug: exit garbage 
     printf(1,"fork_cow_with_swap starting.........\n");
-    int pages = 21;
+    int pages = 22;
     // printf(1, "asking for %d pages\n",pages);
     char *buf = sbrk(4096 * pages);
     for (int i = 0; i < pages; i++) {
@@ -226,7 +226,6 @@ void test1()
 int main(int argc, char *argv[])
 {
 
-    //fork_cow_no_swap();
     //swap_no_fork();
     fork_cow_with_swap(); // "working" for some number of pages 
     exit();
