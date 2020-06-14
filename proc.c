@@ -117,15 +117,15 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
-  initPmdArr(p->ramPmd,MAX_PSYC_PAGES);
-  initPmdArr(p->swapPmd,MAX_TOTAL_PAGES - MAX_PSYC_PAGES);
-  initHeap(p->prioArr,MAX_PRIO_ARR);
-
+  initPmdArr(p->ramPmd, MAX_PSYC_PAGES);
+  initPmdArr(p->swapPmd, MAX_TOTAL_PAGES - MAX_PSYC_PAGES);
+  initHeap(p->prioArr, MAX_PRIO_ARR);
 
   p->pagesInMemory = 0;
   p->pagesInSwapfile = 0;
 
-  if (p->pid > 2){
+  if (p->pid > 2)
+  {
     createSwapFile(p);
   }
 
@@ -133,7 +133,6 @@ found:
 }
 
 static char buffer[PGSIZE];
-
 
 //PAGEBREAK: 32
 // Set up first user process.
@@ -210,17 +209,8 @@ int fork(void)
   }
 
   // Copy process state from proc.
-
-  if (curproc->pid <= 2)
-  {
-    np->pgdir = cowuvm(curproc->pgdir, curproc->sz);
-  }
-  else
-  {
-    np->pgdir = copyuvm(curproc->pgdir, curproc->sz);
-  }
-  if (np->pgdir == 0)
-  { //if cowuvm or copyuvm fails so
+  if ((np->pgdir = cowuvm(curproc->pgdir, curproc->sz)) == 0)
+  { //if cowuvm fails so
     kfree(np->kstack);
     np->kstack = 0;
     np->state = UNUSED;
@@ -236,20 +226,21 @@ int fork(void)
 
   for (int i = 0; i < MAX_PSYC_PAGES; i++)
   {
-    if(curproc->ramPmd[i].occupied) 
-      np->ramPmd[i]= curproc->ramPmd[i];
-    if(curproc->swapPmd[i].occupied && curproc->pid > 2){
-      readFromSwapFile(curproc,buffer,curproc->swapPmd[i].offset,PGSIZE);
-      writeToSwapFile(np,buffer,curproc->swapPmd[i].offset,PGSIZE);
-      np->swapPmd[i]= curproc->swapPmd[i];
-    }    
+    if (curproc->ramPmd[i].occupied)
+      np->ramPmd[i] = curproc->ramPmd[i];
+    if (curproc->swapPmd[i].occupied && curproc->pid > 2)
+    {
+      readFromSwapFile(curproc, buffer, curproc->swapPmd[i].offset, PGSIZE);
+      writeToSwapFile(np, buffer, curproc->swapPmd[i].offset, PGSIZE);
+      np->swapPmd[i] = curproc->swapPmd[i];
+    }
   }
 
   for (int i = 0; i < MAX_PSYC_PAGES; i++)
   {
     np->prioArr[i] = curproc->prioArr[i];
   }
-  
+
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
@@ -265,9 +256,6 @@ int fork(void)
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
 
   pid = np->pid;
-
-
-  
 
   acquire(&ptable.lock);
 
@@ -290,9 +278,9 @@ void exit(void)
   if (curproc == initproc)
     panic("init exiting");
 
-  #if DEBUG
-    cprintf("exiting... pid%d\n",curproc->pid);
-  #endif
+#if DEBUG
+  cprintf("exiting... pid%d\n", curproc->pid);
+#endif
 
   // Close all open files.
   for (fd = 0; fd < NOFILE; fd++)
@@ -311,7 +299,7 @@ void exit(void)
   if (curproc->pid > 2)
   {
     if (removeSwapFile(curproc) == -1)
-      panic("exit: failed to removeSwapFile");    
+      panic("exit: failed to removeSwapFile");
   }
 
   begin_op();
@@ -341,6 +329,73 @@ void exit(void)
   panic("zombie exit");
 }
 
+int wait2(int *memoryPages, int *swapPages, int *pageFaults, int *pagedOut)
+{
+  struct proc *p;
+  int havekids, pid;
+  struct proc *curproc = myproc();
+
+  acquire(&ptable.lock);
+  for (;;)
+  {
+    // Scan through table looking for exited children.
+    havekids = 0;
+    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+    {
+      if (p->parent != curproc)
+        continue;
+      havekids = 1;
+      if (p->state == ZOMBIE)
+      {
+// Found one.
+#if DEBUG
+        cprintf("proc.c free zobie\n");
+#endif
+
+        pid = p->pid;
+        if (decrementReferencesAndGetPrevVal(p->kstack) == 1)
+        {
+          kfree(p->kstack);
+        }
+
+        *memoryPages = p->pagesInMemory;
+        *swapPages = p->pagesInSwapfile;
+        *pagedOut = p->pagedout;
+        *pageFaults = p->pagefaults;
+
+        p->kstack = 0;
+        freevm(p->pgdir);
+        p->pid = 0;
+        p->parent = 0;
+        p->name[0] = 0;
+        p->killed = 0;
+        p->state = UNUSED;
+
+        initPmdArr(p->ramPmd, MAX_PSYC_PAGES);
+        initPmdArr(p->swapPmd, MAX_TOTAL_PAGES - MAX_PSYC_PAGES);
+        initHeap(p->prioArr, MAX_PRIO_ARR);
+
+        p->prioSize = 0;
+        p->pagesInMemory = 0;
+        p->prioSize = 0;
+
+        release(&ptable.lock);
+        return pid;
+      }
+    }
+
+    // No point waiting if we don't have any children.
+    if (!havekids || curproc->killed)
+    {
+      release(&ptable.lock);
+      return -1;
+    }
+
+    // Wait for children to exit.  (See wakeup1 call in proc_exit.)
+    sleep(curproc, &ptable.lock); //DOC: wait-sleep
+  }
+}
+
 // Wait for a child process to exit and return its pid.
 // Return -1 if this process has no children.
 int wait(void)
@@ -361,20 +416,17 @@ int wait(void)
       havekids = 1;
       if (p->state == ZOMBIE)
       {
-        // Found one.
-        #if DEBUG
-          cprintf("proc.c free zobie\n");
-        #endif
+// Found one.
+#if DEBUG
+        cprintf("proc.c free zobie\n");
+#endif
 
         pid = p->pid;
-        if (curproc->pid  > 2)
+        if (decrementReferencesAndGetPrevVal(p->kstack) == 1)
         {
-          if (decrementReferencesAndGetPrevVal(p->kstack) == 1)
-          {
-            kfree(p->kstack);
-          }
+          kfree(p->kstack);
         }
-       
+
         p->kstack = 0;
         freevm(p->pgdir);
         p->pid = 0;
@@ -383,14 +435,14 @@ int wait(void)
         p->killed = 0;
         p->state = UNUSED;
 
-        initPmdArr(p->ramPmd,MAX_PSYC_PAGES);
-        initPmdArr(p->swapPmd,MAX_TOTAL_PAGES - MAX_PSYC_PAGES);
-        initHeap(p->prioArr,MAX_PRIO_ARR);
+        initPmdArr(p->ramPmd, MAX_PSYC_PAGES);
+        initPmdArr(p->swapPmd, MAX_TOTAL_PAGES - MAX_PSYC_PAGES);
+        initHeap(p->prioArr, MAX_PRIO_ARR);
 
         p->prioSize = 0;
         p->pagesInMemory = 0;
         p->prioSize = 0;
-       
+
         release(&ptable.lock);
         return pid;
       }
@@ -416,99 +468,15 @@ void initPmd(struct paging_meta_data *pmd)
   pmd->age = 0;
 }
 
-void initPmdArr(struct proc *p, struct paging_meta_data *pmd)
+void initPmdArr(struct paging_meta_data *pmd, uint size)
 {
-
-void initPmdArr(struct paging_meta_data *pmd,uint size){  
-  struct paging_meta_data * p = pmd;
+  struct paging_meta_data *p = pmd;
   for (; p < &pmd[size]; p++)
-
   {
     initPmd(p);
   }
 }
 
-int wait2(int *memoryPages, int *swapPages, int *pageFaults, int *pagedOut)
-{
-  struct proc *p;
-  int havekids, pid;
-  struct proc *curproc = myproc();
-
-  acquire(&ptable.lock);
-  for (;;)
-  {
-    // Scan through table looking for exited children.
-    havekids = 0;
-    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    {
-      if (p->parent != curproc)
-        continue;
-      havekids = 1;
-      if (p->state == ZOMBIE)
-      {
-        // Found one.
-        //cprintf("proc.c free zobie\n");
-        pid = p->pid;
-        if (curproc->pid > 2)
-        {
-          if (decrementReferencesAndGetPrevVal(p->kstack) == 1)
-          {
-            kfree(p->kstack);
-          }
-        }
-        // if (getNumberReferences(p->kstack) == 1)
-        // {
-        //   kfree(p->kstack);
-        // }else{
-        //   decrementReferences(p->kstack);
-        // }
-        if (curproc->pid > 2)
-        {
-          *memoryPages = p->pagesInMemory;
-          *swapPages = p->pagesInSwapfile;
-          *pageFaults = p->pagefaults;
-          *pagedOut = p->pagedout;
-        }
-        p->kstack = 0;
-        freevm(p->pgdir);
-        p->pid = 0;
-        p->parent = 0;
-        p->name[0] = 0;
-        p->killed = 0;
-        p->state = UNUSED;
-
-        if (curproc->pid > 2)
-        {
-          initPmdArr(p, p->ramPmd);
-          initPmdArr(p, p->swapPmd);
-
-          p->prioSize = 0;
-          p->pagesInMemory = 0;
-          p->prioSize = 0;
-        }
-        // memset(p->swapPmd, 0, MAX_PSYC_PAGES * sizeof(struct paging_meta_data));
-        // memset(p->ramPmd, 0, MAX_PSYC_PAGES * sizeof(struct paging_meta_data));
-        // p->pagesInSwapfile = 0;
-        // p->pagesInMemory = 0;
-        // //memset(p->prioArr, 0, p->prioSize * sizeof(struct heap_p));
-        // p->prioSize = 0;
-
-        release(&ptable.lock);
-        return pid;
-      }
-    }
-
-    // No point waiting if we don't have any children.
-    if (!havekids || curproc->killed)
-    {
-      release(&ptable.lock);
-      return -1;
-    }
-
-    // Wait for children to exit.  (See wakeup1 call in proc_exit.)
-    sleep(curproc, &ptable.lock); //DOC: wait-sleep
-  }
-}
 //PAGEBREAK: 4
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -736,17 +704,20 @@ void procdump(void)
   }
 }
 
-void increaseProcAge(){
-  struct proc* p = myproc();
-  
-  for(int i=0; i<MAX_PRIO_ARR;i++){
+void increaseProcAge()
+{
+  struct proc *p = myproc();
+
+  for (int i = 0; i < MAX_PRIO_ARR; i++)
+  {
     int pageNum = p->prioArr[i].index;
-    if (pageNum != -1){
-      if((p->ramPmd[i].occupied)){
+    if (pageNum != -1)
+    {
+      if ((p->ramPmd[i].occupied))
+      {
         p->ramPmd[i].age++;
         p->prioArr[i].priority++;
-      }     
+      }
     }
-    
   }
 }
