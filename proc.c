@@ -177,7 +177,6 @@ int growproc(int n)
 {
   uint sz;
   struct proc *curproc = myproc();
-  cprintf("grow proc pid is %d\n",curproc->pid );
   sz = curproc->sz;
   if (n > 0)
   {

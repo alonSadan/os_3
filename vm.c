@@ -249,7 +249,8 @@ void insertPageToPrioQueue(int pageNum)
     deleteRoot(p->prioArr, pageNum, &p->prioSize); //return;
 
 #if DEBUG
-    //cprintf("insertPageToPrioQueue: insert pageNum:%d to prioQueue\n",pageNum);
+  printPrioArr();
+  cprintf("insertPageToPrioQueue: insert pageNum:%d to prioQueue\n",pageNum);
 #endif
 
 #if NFUA
@@ -334,6 +335,7 @@ int allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 
 #if DEBUG
       cprintf("allocuvm: a:%d, pages in memory:%d pages in swapFile:%d\n", a, p->pagesInMemory, p->pagesInSwapfile);
+      printPrioArr();
 #endif
     }
   }
@@ -578,6 +580,8 @@ void pageToSwapFile(int memIndex, int swapIndex, pde_t *pgdir)
 
 #if DEBUG
   cprintf("pageToSwapFile pid%d: memIndex:%d mem va:%p,swapIndex:%d\n", p->pid, memIndex, p->ramPmd[memIndex].va, swapIndex);
+    printPrioArr();
+
 #endif
 
   if (memIndex == -1)
@@ -982,6 +986,7 @@ void updatePageInPriorityQueue(int pageNum)
               if (*nextPte & PTE_A){
                 #if DEBUG
                   cprintf("AQ: before swap: a prio:%d b prio:%d\n",a.priority,b.priority);
+                  printPrioArr();
                 #endif
 
                 deleteRoot(p->prioArr, a.index, &p->prioSize);
@@ -990,6 +995,8 @@ void updatePageInPriorityQueue(int pageNum)
 
                 #if DEBUG
                   cprintf("AQ: after swap: a prio:%d b prio:%d\n",a.priority,b.priority);
+                  printPrioArr();
+
                 #endif
 
                 insertHeap(p->prioArr, a, &p->prioSize);
@@ -1058,7 +1065,6 @@ void swapPages(int memIndex, int swapIndex, pde_t *pgdir)
   }
 
 #if DEBUG
-  cprintf("swapPages: pid%d: va1:%p\n", p->pid, va1);
   cprintf("swapPages: backup page from ram %d\n", memIndex);
 #endif
   //backup swap page
@@ -1067,6 +1073,7 @@ void swapPages(int memIndex, int swapIndex, pde_t *pgdir)
   //insert page to swap file
 #if DEBUG
   cprintf("swapPages: insert mem-page in index %d  to swap  in index %d\n", memIndex, swapIndex);
+  printPrioArr();
 #endif
 
   pageToSwapFile(memIndex, swapIndex, pgdir);
@@ -1084,6 +1091,7 @@ void swapPages(int memIndex, int swapIndex, pde_t *pgdir)
 //insert to memory
 #if DEBUG
   cprintf("swapPages: insert swap-page in index %d to memory in index %d\n", swapIndex, memIndex);
+  printPrioArr();
 #endif
   //update data structure
   p->ramPmd[memIndex] = tmp;
@@ -1103,6 +1111,7 @@ void swapPages(int memIndex, int swapIndex, pde_t *pgdir)
 //move to swap file if required
 #if DEBUG
   cprintf("swapPages pid%d: va1:%p\n", p->pid, p->ramPmd[memIndex].va);
+  printPrioArr();
 #endif
 
   if (mappages(p->pgdir, (void *)p->ramPmd[memIndex].va, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0)
@@ -1111,4 +1120,13 @@ void swapPages(int memIndex, int swapIndex, pde_t *pgdir)
   }
   memmove(mem, swapBuffer, PGSIZE);
   lcr3(V2P(p->pgdir));
+}
+
+void printPrioArr(){
+  struct proc *p = myproc();
+  int i = 0;
+  cprintf("PAGE_INDEX\tPAGE_PRIO\n\n");
+  for(i = 0 ; i< p->prioSize ; ++i){
+    cprintf("%d\t\t%d\n",p->prioArr[i].index,p->prioArr[i].priority);
+  } 
 }
