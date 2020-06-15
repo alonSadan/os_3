@@ -117,15 +117,15 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
-  initPmdArr(p->ramPmd,MAX_PSYC_PAGES);
-  initPmdArr(p->swapPmd,MAX_TOTAL_PAGES - MAX_PSYC_PAGES);
-  initHeap(p->prioArr,MAX_PRIO_ARR);
-
+  initPmdArr(p->ramPmd, MAX_PSYC_PAGES);
+  initPmdArr(p->swapPmd, MAX_TOTAL_PAGES - MAX_PSYC_PAGES);
+  initHeap(p->prioArr, MAX_PRIO_ARR);
 
   p->pagesInMemory = 0;
   p->pagesInSwapfile = 0;
 
-  if (p->pid > 2){
+  if (p->pid > 2)
+  {
     createSwapFile(p);
   }
 
@@ -133,7 +133,6 @@ found:
 }
 
 static char buffer[PGSIZE];
-
 
 //PAGEBREAK: 32
 // Set up first user process.
@@ -178,7 +177,7 @@ int growproc(int n)
 {
   uint sz;
   struct proc *curproc = myproc();
-
+  cprintf("grow proc pid is %d\n",curproc->pid );
   sz = curproc->sz;
   if (n > 0)
   {
@@ -191,6 +190,9 @@ int growproc(int n)
       return -1;
   }
   curproc->sz = sz;
+  if(sz < curproc->sz){
+    cprintf("curproc size %d and new size %d\n", curproc->sz, sz);
+  }
   switchuvm(curproc);
   return 0;
 }
@@ -227,20 +229,21 @@ int fork(void)
 
   for (int i = 0; i < MAX_PSYC_PAGES; i++)
   {
-    if(curproc->ramPmd[i].occupied) 
-      np->ramPmd[i]= curproc->ramPmd[i];
-    if(curproc->swapPmd[i].occupied && curproc->pid > 2){
-      readFromSwapFile(curproc,buffer,curproc->swapPmd[i].offset,PGSIZE);
-      writeToSwapFile(np,buffer,curproc->swapPmd[i].offset,PGSIZE);
-      np->swapPmd[i]= curproc->swapPmd[i];
-    }    
+    if (curproc->ramPmd[i].occupied)
+      np->ramPmd[i] = curproc->ramPmd[i];
+    if (curproc->swapPmd[i].occupied && curproc->pid > 2)
+    {
+      readFromSwapFile(curproc, buffer, curproc->swapPmd[i].offset, PGSIZE);
+      writeToSwapFile(np, buffer, curproc->swapPmd[i].offset, PGSIZE);
+      np->swapPmd[i] = curproc->swapPmd[i];
+    }
   }
 
   for (int i = 0; i < MAX_PSYC_PAGES; i++)
   {
     np->prioArr[i] = curproc->prioArr[i];
   }
-  
+
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
@@ -257,7 +260,6 @@ int fork(void)
 
   pid = np->pid;
 
-  
   acquire(&ptable.lock);
 
   np->state = RUNNABLE;
@@ -279,9 +281,9 @@ void exit(void)
   if (curproc == initproc)
     panic("init exiting");
 
-  #if DEBUG
-    cprintf("exiting... pid%d\n",curproc->pid);
-  #endif
+#if DEBUG
+  cprintf("exiting... pid%d\n", curproc->pid);
+#endif
 
   // Close all open files.
   for (fd = 0; fd < NOFILE; fd++)
@@ -293,21 +295,20 @@ void exit(void)
     }
   }
 
-  #if TRUE
-    procdump();
-  #endif
+#if TRUE
+  procdump();
+#endif
 
   if (curproc->pid > 2)
   {
     if (removeSwapFile(curproc) == -1)
-      panic("exit: failed to removeSwapFile");    
+      panic("exit: failed to removeSwapFile");
   }
 
   begin_op();
   iput(curproc->cwd);
   end_op();
   curproc->cwd = 0;
-
 
   acquire(&ptable.lock);
 
@@ -331,6 +332,72 @@ void exit(void)
   panic("zombie exit");
 }
 
+int wait2(int *memoryPages, int *swapPages, int *pageFaults, int *pagedOut)
+{
+  struct proc *p;
+  int havekids, pid;
+  struct proc *curproc = myproc();
+
+  acquire(&ptable.lock);
+  for (;;)
+  {
+    // Scan through table looking for exited children.
+    havekids = 0;
+    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+    {
+      if (p->parent != curproc)
+        continue;
+      havekids = 1;
+      if (p->state == ZOMBIE)
+      {
+// Found one.
+#if DEBUG
+        cprintf("proc.c free zobie\n");
+#endif
+        pid = p->pid;
+        if (decrementReferencesAndGetPrevVal(p->kstack) == 1)
+        {
+          kfree(p->kstack);
+        }
+
+        *memoryPages = p->pagesInMemory;
+        *swapPages = p->pagesInSwapfile;
+        *pagedOut = p->pagedout;
+        *pageFaults = p->pagefaults;
+
+        p->kstack = 0;
+        freevm(p->pgdir);
+        p->pid = 0;
+        p->parent = 0;
+        p->name[0] = 0;
+        p->killed = 0;
+        p->state = UNUSED;
+
+        initPmdArr(p->ramPmd, MAX_PSYC_PAGES);
+        initPmdArr(p->swapPmd, MAX_TOTAL_PAGES - MAX_PSYC_PAGES);
+        initHeap(p->prioArr, MAX_PRIO_ARR);
+
+        p->prioSize = 0;
+        p->pagesInMemory = 0;
+        p->prioSize = 0;
+
+        release(&ptable.lock);
+        return pid;
+      }
+    }
+
+    // No point waiting if we don't have any children.
+    if (!havekids || curproc->killed)
+    {
+      release(&ptable.lock);
+      return -1;
+    }
+
+    // Wait for children to exit.  (See wakeup1 call in proc_exit.)
+    sleep(curproc, &ptable.lock); //DOC: wait-sleep
+  }
+}
+
 // Wait for a child process to exit and return its pid.
 // Return -1 if this process has no children.
 int wait(void)
@@ -351,16 +418,17 @@ int wait(void)
       havekids = 1;
       if (p->state == ZOMBIE)
       {
-        // Found one.
-        #if DEBUG
-          cprintf("proc.c free zobie\n");
-        #endif
+// Found one.
+#if DEBUG
+        cprintf("proc.c free zobie\n");
+#endif
 
         pid = p->pid;
-         if (decrementReferencesAndGetPrevVal(p->kstack) == 1){
-          kfree(p->kstack);
-        }
        
+          if (decrementReferencesAndGetPrevVal(p->kstack) == 1)
+          {
+            kfree(p->kstack);
+          }
         p->kstack = 0;
         freevm(p->pgdir);
         p->pid = 0;
@@ -369,14 +437,14 @@ int wait(void)
         p->killed = 0;
         p->state = UNUSED;
 
-        initPmdArr(p->ramPmd,MAX_PSYC_PAGES);
-        initPmdArr(p->swapPmd,MAX_TOTAL_PAGES - MAX_PSYC_PAGES);
-        initHeap(p->prioArr,MAX_PRIO_ARR);
+        initPmdArr(p->ramPmd, MAX_PSYC_PAGES);
+        initPmdArr(p->swapPmd, MAX_TOTAL_PAGES - MAX_PSYC_PAGES);
+        initHeap(p->prioArr, MAX_PRIO_ARR);
 
         p->prioSize = 0;
         p->pagesInMemory = 0;
         p->prioSize = 0;
-       
+
         release(&ptable.lock);
         return pid;
       }
@@ -394,28 +462,23 @@ int wait(void)
   }
 }
 
-void initPmd(struct paging_meta_data *pmd){
+void initPmd(struct paging_meta_data *pmd)
+{
   pmd->va = (char *)-1;
   pmd->occupied = 0;
   pmd->offset = 0;
   pmd->age = 0;
 }
 
-
-void initPmdArr(struct paging_meta_data *pmd,uint size){  
-  struct paging_meta_data * p = pmd;
+void initPmdArr(struct paging_meta_data *pmd, uint size)
+{
+  struct paging_meta_data *p = pmd;
   for (; p < &pmd[size]; p++)
   {
     initPmd(p);
   }
-
 }
 
-
-int wait2(int *memoryPages, int *swapPages, int *pageFaults, int *pagedOut)
-{
-  return 0;
-}
 //PAGEBREAK: 4
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -450,6 +513,7 @@ void scheduler(void)
       p->state = RUNNING;
 
       swtch(&(c->scheduler), p->context);
+      //updatePagesInPriorityQueue(); 
       switchkvm();
 
       // Process is done running for now.
@@ -643,18 +707,21 @@ void procdump(void)
   }
 }
 
-void increaseProcAge(){
-  struct proc* p = myproc();
-  
-  for(int i=0; i<MAX_PRIO_ARR;i++){
+void increaseProcAge()
+{
+  struct proc *p = myproc();
+
+  for (int i = 0; i < MAX_PRIO_ARR; i++)
+  {
     int pageNum = p->prioArr[i].index;
-    if (pageNum != -1){
-      if((p->ramPmd[i].occupied)){
+    if (pageNum != -1)
+    {
+      if ((p->ramPmd[i].occupied))
+      {
         p->ramPmd[i].age++;
         p->prioArr[pageNum].priority++;
       }     
     }
-    
   }
 }
 
