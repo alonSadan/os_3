@@ -45,53 +45,22 @@ int main(int argc, char **argv)
             print = 1;
         }
     }
+    if (print)
+    {
+        printf(1, "print mode\n");
+    }
     printf(1, "starting automate tests\n");
-    //testAlloc();
-    //testfork();
-    // testONpageFault1();
-    //     testONpageFault2();
-//    testONpageFault3();            //not passing - panic aquire
-  // sanitycow();                   //not passing , but this could be OK
-    // testcow1();
-    // testcow2();
-    // testcow3();
-   //  EladTestfork();
-     EladTest1();
-    // printf(1, "automate tests passed!!!!!!!!!!\n");
-    // printf(1, "please check the satats:\n");
-    // //pageReplacmentStats();
-
-    // malloc(4096*16);
-
-    // int pid;//,processNum=1;
-    // int i = 1234;
-    // printf(1,"start: pid=%d i=%d free pages=%d\n",getpid(),i, getNumberOfFreePages());
-    // sleep(10);
-    // printf(1,"start2: pid=%d i=%d free pages=%d\n",getpid(),i, getNumberOfFreePages());
-    // if ((pid = fork()) == 0){
-    //     printf(1,"child pid %d i=%d, free pages=%d \n",getpid(),i,getNumberOfFreePages());
-    //     i = 6666;
-    //     printf(1,"child pid %d i=%d, free pages=%d \n",getpid(),i,getNumberOfFreePages());
-    //     exit();
-    // }else{
-    //     //printf(1,"parent pid %d,i=%d, freePages=%d \n",getpid(),i,getNumberOfFreePages());
-    //     wait();
-    // }
-
-    // printf(1,"end: i=%d free pages: %d\n",i, getNumberOfFreePages());
-    // for (int kid = 0; kid < processNum; kid++) {
-    //     //Child process
-    //     if ((pid = fork()) == 0){
-    //         printf(1,"child %d before write - NumberOf pages: %d\n",kid,getNumberOfFreePages());
-    //         sleep(10);
-    //         printf(2,"child %d before write - NumberOf pages: %d\n",kid,getNumberOfFreePages());
-    //         exit();
-    //     }
-    // }
-    // for (int kid = 0; kid < processNum; ++kid) {
-    //     wait(); // kids could be ready in any order
-    // }
-
+    testAlloc();
+    testfork();
+    testONpageFault1();
+    testONpageFault2();
+    testONpageFault3(); //not passing - panic aquire
+    sanitycow();        //not passing , but this could be OK
+    testcow1();
+    testcow2();
+    testcow3();
+    EladTestfork();
+    EladTest1();
     exit();
 }
 
@@ -125,18 +94,20 @@ void testAlloc()
     int swapPages = null;
     int pageFaults = null;
     int pagedOut = null;
-
     int numberOfPages = 20;
     sbrk(4096 * numberOfPages);
     getStats(&memoryPages, &swapPages, &pageFaults, &pagedOut);
     if (memoryPages < 16)
     {
+        sbrk(-(4096 * numberOfPages));
         fail("should allocate pages on swap only when memory is full");
     }
     if (swapPages < 4)
     {
+        sbrk(-(4096 * numberOfPages));
         fail("should have at least 4 pages in swap");
     }
+    sbrk(-(4096 * numberOfPages));
     pass("allocation test passed");
 }
 // test fork : fork a process and check that the child has the same number of swap pages and physical pages
@@ -157,10 +128,12 @@ void testfork()
     int parentPagedOut = null;
 
     int numberOfPages = 16;
-    char *buf = malloc(4096 * numberOfPages);
-    //Parent feilds
+    sbrk(4096 * numberOfPages);
+    //Parent felids
     getStats(&parentMemoryPages, &parentSwapPgaes, &parentPageFaults, &parentPagedOut);
-    if ((pid = fork()) == 0)
+
+    pid = fork();
+    if (pid == 0)
     {
         sleep(5);
         if (print)
@@ -168,18 +141,23 @@ void testfork()
             printf(1, "child stats:\n");
             printStats();
         }
+        sbrk(-(4096 * numberOfPages));
+        exit();
     }
     else
     {
         //printf(1,"parent pid %d,i=%d, freePages=%d \n",getpid(),i,getNumberOfFreePages());
         pid = wait2(&memoryPages, &swapPages, &pageFaults, &pagedOut);
+
         if (parentMemoryPages != memoryPages)
         {
+            sbrk(-(4096 * numberOfPages));
             printf(1, "parnet memory pages: %d\n child memory pages: %d\n", parentMemoryPages, memoryPages);
             fail("test fork failed: memory pages were not equal\n");
         }
         if (parentSwapPgaes != swapPages)
         {
+            sbrk(-(4096 * numberOfPages));
             printf(1, "parnet swap Pages: %d\n child swap pages: %d\n", parentSwapPgaes, swapPages);
             fail("test fork failed: swap pages were not equal\n");
         }
@@ -189,7 +167,8 @@ void testfork()
             printStats();
         }
 
-        free(buf);
+        //free(buf);
+        sbrk(-(4096 * (numberOfPages)));
         printf(1, "after freeing buf:\n");
         pass("test fork passed\n");
     }
@@ -205,6 +184,11 @@ void testONpageFault1()
     int pageFaults = null;
     int pagedOut = null;
     int numberOfPages = 5; //choos 5 to make sure pages are not allocated in ram.
+    getStats(&memoryPages, &swapPages, &pageFaults, &pagedOut);
+
+    //sometimes we have leftovers from other tests
+    int oldNumberofSwapPages = swapPages;
+    int oldNumberofRamPages = memoryPages;
 
     char *buf = sbrk(4096 * numberOfPages);
 
@@ -214,12 +198,12 @@ void testONpageFault1()
     }
     getStats(&memoryPages, &swapPages, &pageFaults, &pagedOut);
 
-    if (memoryPages < 5)
+    if (memoryPages < oldNumberofRamPages + 5)
     {
         fail("did not allocate pages in memory");
     }
 
-    if (swapPages > 0 || swapPages > 0)
+    if (swapPages > oldNumberofSwapPages)
     { //maybe check pagefaults?
         fail("should not allocate pages in swap");
     }
@@ -235,8 +219,8 @@ void testONpageFault1()
     {
         printStats();
     }
-
     free(buf);
+    sbrk(-(4096 * numberOfPages));
     printf(1, "after freeing buf:\n");
     pass("onPageFault-1 passed\n");
 }
@@ -300,7 +284,7 @@ void testONpageFault2()
         printStats();
     }
 
-    free(buf);
+    sbrk(-(4096 * numberOfPages));
     printf(1, "after freeing buf:\n");
     pass("onPageFault-2 passed\n");
 }
@@ -316,16 +300,16 @@ void testONpageFault3()
     int numberOfPages; //choos 16 to make sure pages are ram is full and swap have free space.
 
     getStats(&memoryPages, &swapPages, &pageFaults, &pagedOut);
-    numberOfPages = (32 - memoryPages); //fill memory completely
+    numberOfPages = (32 - (memoryPages + swapPages)); //fill memory completely
     printf(1, "number of pages to allocate %d\n", numberOfPages);
     char *buf = sbrk(4096 * numberOfPages);
-
-    for (int i = 0; i < numberOfPages; i++)
+    printStats();
+    for (int i = 1; i < numberOfPages; i++)
     {
+        printf(1, "adlkjnsadlaskdalsdadllakjsdnasdkl\n");
 
-        strcpy(&buf[i * 4096], "test");
+        strcpy(&buf[i * 4096] - 5, "test");
     }
-
     getStats(&memoryPages, &swapPages, &pageFaults, &pagedOut);
     if (memoryPages < 16)
     {
@@ -341,7 +325,6 @@ void testONpageFault3()
     {
         fail(" should have at least one paged out page\n");
     }
-
     getStats(&memoryPages, &swapPages, &pageFaults, &pagedOut);
     int oldPagedOut = pagedOut;
 
@@ -369,7 +352,7 @@ void testONpageFault3()
         printStats();
     }
 
-    free(buf);
+    sbrk(-(4096 * numberOfPages));
     printf(1, "after freeing buf:\n");
     pass("onPageFault-3 passed\n");
 }
@@ -383,7 +366,7 @@ void sanitycow()
     printf(1, "before test numebr of free pages %d\n", getNumberOfFreePages());
     if ((pid = fork()) == 0)
     {
-       // printf(1, "child numebr of free pages %d\n", getNumberOfFreePages());
+        // printf(1, "child numebr of free pages %d\n", getNumberOfFreePages());
         while (1)
         {
         };
@@ -412,14 +395,14 @@ void testcow1()
     {
 
         strcpy(test, "pass");
-        printf(1,"child number of free pages: %d\n", getNumberOfFreePages());
+        printf(1, "child number of free pages: %d\n", getNumberOfFreePages());
         while (1)
         {
         };
     }
 
     sleep(10);
-    printf(1,"parent number of free pages: %d\n", getNumberOfFreePages());
+    printf(1, "parent number of free pages: %d\n", getNumberOfFreePages());
     if (oldNumberOfFreePages <= getNumberOfFreePages())
     {
         kill(pid); //I use kill so that I can fail the test properly. in testcow2 I made it the regular way
@@ -466,7 +449,7 @@ void testcow3()
 {
     printf(1, "testcow3:\n");
     int numberOfPages = 16;
-    char *buf = sbrk(4096 * numberOfPages);
+    sbrk(4096 * numberOfPages);
     if (print)
     {
         printStats();
@@ -481,7 +464,7 @@ void testcow3()
         printStats();
     }
 
-    free(buf);
+    sbrk(-(4096 * numberOfPages));
     printf(1, "after freeing buf:\n");
     pass("testcow-3 passed\n");
 }
@@ -500,7 +483,7 @@ void EladTestfork()
 
     if (fork() == 0)
     {
-        printf(1,"hasdjkannnnnnnnnnnnnnnnnnnnnn\n");
+        printf(1, "hasdjkannnnnnnnnnnnnnnnnnnnnn\n");
         for (int i = 0; i < pages; i++)
         {
             printf(1, "child data: %c\n", buf[i * 4096]);
@@ -524,16 +507,15 @@ void EladTestfork()
             printf(1, "father data: %c\n", buf[i * 4096]);
         }
         wait();
-        free(buf);
+        sbrk(-(4096 * pages));
     }
 }
 
-void 
-EladTest1()
+void EladTest1()
 {
     int pages = 16;
     // printf(1, "asking for %d pages\n",pages);
-    char *buf = malloc(4096 * pages);
+    char *buf = sbrk(4096 * pages);
     for (int i = 0; i < pages; i++)
     {
         buf[i * 4096] = 'a';
@@ -541,12 +523,12 @@ EladTest1()
     printf(1, "good\n");
     for (int i = 0; i < pages; i++)
     {
-    printf(1, "data: %c\n", buf[i * 4096]);
+        printf(1, "data: %c\n", buf[i * 4096]);
     }
 
     printf(1, "calling free\n");
     sleep(10);
-    free(buf);
+    sbrk(-(4096 * pages));
 }
 
 int strncmp(const char *p, const char *q, int n)
@@ -571,5 +553,5 @@ void printStats()
     getStats(&memoryPages, &swapPages, &pageFaults, &pagedOut);
 
     printf(1, "PROC_NUM\tPAGES_IN_MEMORY\t\tPAGES_IN_SWAP\tTOTAL_PAGE_FAULTS\tTOTAL_PAGED_OUT\t\tFREE_PAGES_IN_MEMORY\n");
-    printf(1, "%d\t\t%d\t\t\t%d\t\t\t%d\t\t%d\t\t\t%d\n", getpid(), memoryPages, swapPages, pageFaults, pagedOut, getNumberOfFreePages());
+    printf(1, "%d\t\t%d\t\t\t%d\t\t\t%d\t\t%d\t\t\t%d\n\n", getpid(), memoryPages, swapPages, pageFaults, pagedOut, getNumberOfFreePages());
 }

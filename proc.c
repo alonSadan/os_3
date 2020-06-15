@@ -177,7 +177,7 @@ int growproc(int n)
 {
   uint sz;
   struct proc *curproc = myproc();
-
+  cprintf("grow proc pid is %d\n",curproc->pid );
   sz = curproc->sz;
   if (n > 0)
   {
@@ -190,6 +190,9 @@ int growproc(int n)
       return -1;
   }
   curproc->sz = sz;
+  if(sz < curproc->sz){
+    cprintf("curproc size %d and new size %d\n", curproc->sz, sz);
+  }
   switchuvm(curproc);
   return 0;
 }
@@ -351,7 +354,6 @@ int wait2(int *memoryPages, int *swapPages, int *pageFaults, int *pagedOut)
 #if DEBUG
         cprintf("proc.c free zobie\n");
 #endif
-
         pid = p->pid;
         if (decrementReferencesAndGetPrevVal(p->kstack) == 1)
         {
@@ -422,11 +424,11 @@ int wait(void)
 #endif
 
         pid = p->pid;
-        if (decrementReferencesAndGetPrevVal(p->kstack) == 1)
-        {
-          kfree(p->kstack);
-        }
-
+       
+          if (decrementReferencesAndGetPrevVal(p->kstack) == 1)
+          {
+            kfree(p->kstack);
+          }
         p->kstack = 0;
         freevm(p->pgdir);
         p->pid = 0;
@@ -511,6 +513,7 @@ void scheduler(void)
       p->state = RUNNING;
 
       swtch(&(c->scheduler), p->context);
+      //updatePagesInPriorityQueue(); 
       switchkvm();
 
       // Process is done running for now.

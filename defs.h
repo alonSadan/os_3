@@ -221,6 +221,8 @@ void clearpteu(pde_t *pgdir, char *uva);
 void pageToSwapFile(int memIndex,int swapIndex,pde_t *pgdir);
 uint getPageIndex(int inSwapFile,int isOccupied, char *va);
 uint getPagePgdirIndex(int inSwapFile,pde_t *pgdir,char *va);
+void swapPages(int memIndex,int swapIndex,pde_t *pgdir);
+
 
 void onPageFault(uint va);
 uint getNumberOfFreePages();
