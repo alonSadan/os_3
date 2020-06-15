@@ -638,14 +638,19 @@ uint getPageIndex(int inSwapFile, int isOccupied, char *va)
     return getPageIndexDefault(inSwapFile, isOccupied, va);
   }
 
+
 #if NFUA | LAPA | SCFIFO | AQ
   struct proc *p = myproc();
   //if (p->prioSize != p->pagesInMemory)
   //initPagesInPriorityQueue();
   if (p->prioSize == 0)
     return -1;
-  else
+  else{
+    #if AQ
+     decAqValues(peekHeap(p->prioArr).index);
+    #endif
     return peekHeap(p->prioArr).index;
+  }
 #endif
 
 #if NONE
@@ -957,27 +962,44 @@ void updatePageInPriorityQueue(int pageNum)
 
     if (lastIndex != pageNum)
     {
-      struct heap_p a = deleteRoot(p->prioArr, pageNum, &p->prioSize);
-      if (a.index == -1)
-      {
-        insertHeap(p->prioArr, (struct heap_p){pageNum, p->prioArr[lastIndex].priority + 1}, &p->prioSize);
-      }
-      else
-      {
+      struct heap_p a;
+      if ((a = findInHeap(p->prioArr,pageNum,&p->prioSize)).index != -1){
         int tempSize = p->prioSize;
-        struct heap_p temp[tempSize];
-        for (int i = 0; i < tempSize; i++)
-          temp[i] = p->prioArr[i];
-        while ((a = extractMin(temp, &tempSize)).index != pageNum)
-        {
+        struct heap_p temp[MAX_PRIO_ARR];
+        struct heap_p b;
+        memmove(temp,p->prioArr,MAX_PRIO_ARR * sizeof(struct heap_p));
+
+        do{
+          b = extractMin(temp, &tempSize);
+        }while(a.index != pageNum && tempSize > 0);
+         
+        if (tempSize > 0 && a.index == pageNum){
+          b = extractMin(temp, &tempSize);
+          
+          if (b.index != null){
+            pte_t *nextPte = walkpgdir(p->pgdir, p->ramPmd[b.index].va, 0);
+            if (nextPte){
+              if (*nextPte & PTE_A){
+                #if DEBUG
+                  cprintf("AQ: before swap: a prio:%d b prio:%d\n",a.priority,b.priority);
+                #endif
+
+                deleteRoot(p->prioArr, a.index, &p->prioSize);
+                deleteRoot(p->prioArr, b.index, &p->prioSize);
+                swapPrio(&a.priority, &b.priority);
+
+                #if DEBUG
+                  cprintf("AQ: after swap: a prio:%d b prio:%d\n",a.priority,b.priority);
+                #endif
+
+                insertHeap(p->prioArr, a, &p->prioSize);
+                insertHeap(p->prioArr, b, &p->prioSize);
+              }
+            }
+          }
         }
-        struct heap_p b = extractMin(temp, &tempSize);
-        deleteRoot(p->prioArr, a.index, &p->prioSize);
-        deleteRoot(p->prioArr, b.index, &p->prioSize);
-        swapPrio(&a.priority, &b.priority);
-        insertHeap(p->prioArr, a, &p->prioSize);
-        insertHeap(p->prioArr, b, &p->prioSize);
       }
+
     }
     (*pte) &= ~PTE_A;
   }

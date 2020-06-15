@@ -141,6 +141,9 @@ int wait2(int* memoryPages,int* swapPages,int* pageFaults, int* pagedOut);
 void initPmd(struct paging_meta_data *pmd);
 void initPmdArr(struct paging_meta_data *pmd,uint size);
 void increaseProcAge();
+
+
+void decAqValues(uint index);
 //void getStats(int* memoryPages,int* swapPages,int* pageFaults, int* pagedOut);
 
 
