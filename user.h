@@ -2,6 +2,7 @@ struct stat;
 struct rtcdate;
 
 // system calls
+int getNumberOfFreePages(void);
 int fork(void);
 int exit(void) __attribute__((noreturn));
 int wait(void);
@@ -23,6 +24,8 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+void getStats(int*,int*,int*,int*);
+int wait2(int*,int*,int*,int*);
 
 // ulib.c
 int stat(const char*, struct stat*);
